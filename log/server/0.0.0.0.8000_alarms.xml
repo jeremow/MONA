@@ -1,0 +1,13 @@
+<server ip="0.0.0.0" port="8000">
+	<ongoing>
+		<alarm id="5" station="ALFM" state="Current" detail="Too High" datetime="D20210422T082453" />
+		<alarm id="6" station="SONA0" state="Current" detail="Too High" datetime="D20210423T120242" />
+	</ongoing>
+
+	<completed>
+		<alarm id="1" station="SONA0" state="Current" detail="Too High" datetime="D20210421T141002" />
+		<alarm id="2" station="SONA0" state="Current" detail="Too High" datetime="D20210422T163642" />
+		<alarm id="3" station="SONA0" state="Temp Digitizer" detail="Too Hot" datetime="D20210420T210155" />
+		<alarm id="7" station="SONA0" state="Temp Digitizer" detail="Too Hot" datetime="D20210423T120712" />
+	</completed>	
+</server>

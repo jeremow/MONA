@@ -2,58 +2,15 @@
 #
 # # Run this app with `python app.py` and
 # # visit http://127.0.0.1:8050/ in your web browser.
-#
-# import dash
-# import dash_core_components as dcc
-# import dash_html_components as html
-# # from dash.dependencies import Input, Output
-# import plotly.express as px
-# import pandas as pd
-# from obspy import read
-#
-# external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-#
-# app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
-#
-# # assume you have a "long-form" data frame
-# # see https://plotly.com/python/px-arguments/ for more options
-#
-#
-# st = read()
-# tr = st[0]
-#
-# x = tr.times()
-#
-# stats = tr.stats
-#
-# df = pd.DataFrame({
-#     "Time": tr.times("utcdatetime"),
-#     "Amplitude": tr.data
-# })
-#
-# fig = px.line(df, x="Time", y="Amplitude")
-#
-# app.layout = html.Div(children=[
-#
-#
-#     dcc.Graph(
-#         id='example-graph',
-#         figure=fig
-#     ),
-#     html.Div(children=
-#              [html.Div(children='{}: {}'.format(key, element)) for key, element in stats.items()]
-#              ),
-# ])
-#
-# if __name__ == '__main__':
-#     app.run_server(debug=True)
 
 import time
 import io
 import base64
 import os
+import webbrowser
 
 import dash
+import plotly.data
 from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
@@ -69,138 +26,324 @@ from obspy.core import UTCDateTime
 # pandas
 import pandas as pd
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+# style and config
+from assets.style import *
+from config import *
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY], external_scripts=["https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-MML-AM_CHTML" ])
+# sidebar connection
+from connection import *
 
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
+
+# global variables which are useful, dash will say remove these variables, I say let them exist
 server = app.server
+app.title = 'Mona-Lisa'
+client = ServerSeisComP3('0.0.0.0', '18000')
+time_graphs = []
+network_list = []
 
-MARGIN_LEFT = "20%"
-
-SIDEBAR_TOP_STYLE = {
-    "position": "fixed",
-    "top": 0,
-    "left": 0,
-    "bottom": 0,
-    "width": MARGIN_LEFT,
-    "height": "60%",
-    "padding": "1rem 1rem",
-    "margin-right": "2rem",
-    "background-color": "#111111",
-    "font-family": "Tw Cen MT"
-}
-SIDEBAR_BOTTOM_STYLE = {
-    "position": "fixed",
-    "top": "60%",
-    "left": 0,
-    "bottom": 0,
-    "width": MARGIN_LEFT,
-    "padding": "1rem 1rem",
-    "margin-right": "2rem",
-    "background-color": "#111111",
-    "font-family": "Tw Cen MT"
-}
-
-GRAPH_TOP_STYLE = {
-    "margin-left": MARGIN_LEFT,
-    "height": "70%",
-    "margin-right": "2rem",
-    "padding": "1rem 2rem",
-    "font-family": "Tw Cen MT"
-}
-
-GRAPH_BOTTOM_STYLE = {
-    "top": "70%",
-    "margin-left": MARGIN_LEFT,
-    "margin-right": "2rem",
-    "padding": "1rem 2rem",
-    "font-family": "Tw Cen MT"
-}
-
-logo_filename = 'logo.jpg'
+# logo file and decoding to display in browser
+logo_filename = 'assets/logo.jpg'
 encoded_logo = base64.b64encode(open(logo_filename, 'rb').read())
 
+
+# SIDEBAR TOP: LOGO, TITLE, CONNECTION AND CHOICE OF STATIONS FOR TIME-SERIE GRAPHS
 sidebar_top = html.Div(
     [
-        html.H2([html.Img(src='data:image/jpg;base64,{}'.format(encoded_logo.decode())), " MONA"], className="display-4"),
+        html.H2([html.Img(src='data:image/jpg;base64,{}'.format(encoded_logo.decode()), height=80), " MONA-LISA"], className="display-5"),
         html.P(
             [
-                "Monitoring App of the IAG - Mongolia"
+                "Monitoring App of the IAG - " + NAME_AREA
             ],
             className="lead"
         ),
-        dbc.Nav(
-            [
-                dbc.NavLink("Connect to Server", href="/server", active="exact"),
-                dbc.NavLink("Connect to Folder", href="/folder", active="exact"),
-                dbc.NavLink("Import File", href="/file", active="exact"),
-            ],
-            vertical=True,
-            pills=True,
-        ),
+        dbc.Button('Open Grafana', id='btn-grafana', n_clicks=0, className="mr-1",
+                   style={'display': 'inline-block', 'width': '100%'}),
+        html.Br(), html.Br(),
+        html.Div(id="hidden-div", style={"display": "none"}),
+        dbc.Tabs(id="tabs-connection",
+                 children=[
+                     dbc.Tab(label='Server', tab_id='server'),
+                     dbc.Tab(label='Folder', tab_id='folder', disabled=True),
+                     dbc.Tab(label='File', tab_id='file', disabled=True),
+                 ],
+                 active_tab='server'),
+        html.Div(id='tabs-connection-inline'),  # TABS FOR SERVER, FILE, ...
 
-        dcc.Upload(
-            id='upload-data',
-            children=html.Div([
-                'Drag and Drop or ',
-                html.A('Select seismic file')
-            ]),
-            style={
-                'width': '90%',
-                'height': '30px',
-                'lineHeight': '30px',
-                'borderWidth': '1px',
-                'borderStyle': 'dashed',
-                'borderRadius': '2px',
-                'textAlign': 'center',
-
-            },
-            # Allow multiple files to be uploaded
-            multiple=True
-        ),
     ],
 
     style=SIDEBAR_TOP_STYLE,
 )
 
+# Grafana button to open in a new tab the constants of Roddes, Ripex, ...
+
+
+@app.callback(Output('hidden-div', 'children'),
+              Input('btn-grafana', 'n_clicks'))
+def open_grafana(btn1):
+    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+    if 'btn-grafana' in changed_id:
+        webbrowser.open(GRAFANA_LINK)
+
+# INSIDE OF THE TABS
+
+
+@app.callback(Output('tabs-connection-inline', 'children'),
+              Input('tabs-connection', 'active_tab'))
+def render_connection(tab):
+    if tab == 'server':
+        return [
+            html.Div(dbc.Input(id='input-on-submit', placeholder='URL:port', type="text", className="mb-1"),
+                     style={'display': 'inline-block', 'width': '69%'}),
+            html.Div(children=' ', style={'display': 'inline-block', 'width': '2%'}),
+            html.Div(dbc.Button("Connect", id="connect-server-button", className="mr-1"),
+                     style={'display': 'inline-block', 'width': '29%'}),
+            html.Br(),
+        dcc.Interval(
+            id='interval-time-graph',
+            interval=UPDATE_TIME_GRAPH,  # in milliseconds
+            n_intervals=0),
+        dcc.Interval(
+            id='interval-states',
+            interval=UPDATE_TIME_STATES,  # in milliseconds
+            n_intervals=0),
+        dcc.Interval(
+            id='interval-alarms',
+            interval=UPDATE_TIME_ALARMS,  # in milliseconds
+            n_intervals=0),
+            html.Br(),
+            html.H4('Time graphs stations'),
+            html.Div(id='container-button-basic',
+                     children=[
+                         dcc.Dropdown(id='network-list-active',
+                                         placeholder='Select stations for time graphs',
+                                         options=network_list, multi=True, style={'color': 'black'}),
+                         html.P('Connection not active', style={'color': 'red'})
+                         ]
+                     )
+        ]
+    # elif tab == 'folder':
+    #     return html.Div([
+    #         html.H6('Connection to folder not implemented')
+    #     ])
+    # elif tab == 'file':
+    #     return html.Div([
+    #         html.H6('Connection through file'),
+    #         dcc.Upload(
+    #             id='upload-data',
+    #             children=html.Div([
+    #                 'Drag and Drop or ',
+    #                 html.A('Select seismic file')
+    #             ]),
+    #             style={
+    #                 'width': '90%',
+    #                 'height': '30px',
+    #                 'lineHeight': '30px',
+    #                 'borderWidth': '1px',
+    #                 'borderStyle': 'dashed',
+    #                 'borderRadius': '2px',
+    #                 'textAlign': 'center',
+    #
+    #             },
+    #             # Allow multiple files to be uploaded
+    #             multiple=True
+    #         )
+    #     ])
+
+# CONNECTION TO THE SERVER TAB
+
+
+@app.callback(
+    dash.dependencies.Output('container-button-basic', 'children'),
+    [dash.dependencies.Input('connect-server-button', 'n_clicks')],
+    [dash.dependencies.State('input-on-submit', 'value')]
+)
+def connect_update_server(n_clicks, value):
+    global network_list
+    if value is not None:
+        global client
+        client, ip_address, port = create_client(value)
+
+        connection_client(client, ip_address, port, network_list)
+
+        return [
+            dcc.Dropdown(id='network-list-active',
+                         placeholder='Select stations for time graphs',
+                         options=network_list, multi=True, style={'color': 'black'}),
+            html.P('Connection active to {}:{}'.format(ip_address, port), style={'color': 'green'}),
+        ]
+    else:
+        return [
+            dcc.Dropdown(id='network-list-active',
+                         placeholder='Select stations for time graphs',
+                         options=[], multi=True, style={'color': 'black'}),
+            html.P('Connection not active', style={'color': 'red'}),
+        ]
+
+
+# SIDEBAR BOTTOM: HEALTH STATES
+
+
 sidebar_bottom = html.Div(
     [
-        html.H2("Here's the constant", className="display-4"),
+        html.H4('Health states'),
+        html.Div(id='station_list_div', children=dcc.Dropdown(id='station-list-one-choice',
+                                                              placeholder='Select a station', options=network_list,
+                                                              multi=False, style={'color': 'black'})),
+
+        html.Div(id='health-states',
+                 children=dbc.Table()
+                 )
 
     ],
     style=SIDEBAR_BOTTOM_STYLE,
 )
 
-graph_top = html.Div(id='page-content',
-                        style=GRAPH_TOP_STYLE,
-                        children=[
-                                # html.H3(id='title-obspy'),
-                                dcc.Loading(
-                                    id="loading",
-                                    type="default",
-                                    children=html.Div(id="loading-output")
-                                ),
-                                dcc.Loading(id="loading-icon",
-                                            children=dcc.Graph(id='Trace', config={'displaylogo': False}), type="graph"),
+# HEALTH STATE FUNCTION TO RECOVER THE STATION FROM THE SERVER AND DISPLAY IT INTO A GOOD WAY
 
-                                html.Br(),
-                                # html.H3(children='Information about data'),
-                                # html.Div(id='output-data-upload')
-                        ]
+
+@app.callback(Output('station_list_div', 'children'),
+              Input('container-button-basic', 'children'))
+def update_list_station(children):
+    return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
+                         options=network_list, multi=False, style={'color': 'black'})]
+
+
+@app.callback(Output('health-states', 'children'),
+              Input('station-list-one-choice', 'value'),
+              Input('interval-states', 'n_intervals'),
+              prevent_initial_call=True)
+def update_states(station_name, n_intervals):
+    states = []
+    states_list = []
+    if station_name is not None:
+        split_name = station_name.split('.')
+        state_network = split_name[0]
+        state_station = split_name[1]
+        try:
+            states_server = ET.parse('log/server/{}_states.xml'.format(client.ip_address + '.' + str(client.port)))
+            states_server_root = states_server.getroot()
+            for state in states_server_root.findall("./network[@name='{0}']/station[@name='{1}']/"
+                                                    "state".format(state_network, state_station)):
+                states.append([state.attrib['name'], state.attrib['value'], int(state.attrib['problem'])])
+            del states_server, states_server_root
+        except FileNotFoundError:
+            pass
+
+        table_inside = []
+        for state in states:
+            if state[2] == 0:
+                text_badge = "OK"
+                color = "success"
+            elif state[2] == 1:
+                text_badge = "Warning"
+                color = "warning"
+            else:
+                text_badge = "Critic"
+                color = "danger"
+
+            table_inside.append(html.Tr(
+                [html.Td(state[0]),
+                 html.Td(state[1]),
+                 html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))
+                 ]
+            ))
+
+        table_body = [html.Tbody(table_inside)]
+
+        states_list = dbc.Table(table_body,
+                                bordered=True,
+                                dark=True,
+                                hover=True,
+                                responsive=True,
+                                striped=True
+                                )
+
+    return html.Div(id='health-states', children=states_list)
+
+
+graph_top = html.Div(id='content_top_output',
+                        style=GRAPH_TOP_STYLE
                      )
+
+# CLAIREMENT LE BORDEL ICI CA VA ETRE REECRIT NO WORRY
+
+
+@app.callback(Output('content_top_output', 'children'),
+              Input('tabs-connection', 'active_tab'),
+              Input('network-list-active', 'value'),
+              # Input('interval-component', 'n_intervals'),
+              # Input('Trace', 'fig'),
+              prevent_initial_call=True)
+def render_content_top(tab, value):
+    if tab == 'server':
+        global time_graphs
+        global client
+        if value is None:
+            value = []
+        for i in range(0, len(value)):
+            full_sta_name = value[i].split('.')
+            if len(full_sta_name) == 3:
+                net = full_sta_name[0]
+                sta = full_sta_name[1]
+                loc = ''
+                cha = full_sta_name[2]
+            else:
+                net = full_sta_name[0]
+                sta = full_sta_name[1]
+                loc = full_sta_name[2]
+                cha = full_sta_name[3]
+
+            st = client.get_waveforms(net, sta, loc, cha, UTCDateTime()-20, UTCDateTime()-10)
+            tr = st[0]
+            stats = tr.stats
+
+            x = tr.times('UTCDateTime')
+            fig = go.Figure(data=[go.Scattergl(x=x, y=tr.data, mode='lines')])
+            # fig = px.line(df, x="Time", y="Amplitude", title='Display Trace and information of {}'.format(names[0]))
+
+            fig.update_layout(template='plotly_dark', title=value[i], xaxis={'autorange': True}, yaxis={'autorange': True})
+            time_graphs.append(dcc.Graph(figure=fig, id='time-data-'+value[i], config={'displaylogo': False}))
+
+        return html.Div([
+            # html.H6('Connection server tab active'),
+            html.Div(children=time_graphs)
+        ])
+    # elif tab == 'folder':
+    #     return html.Div([
+    #         html.H6('Connection to Folder not implemented'),
+    #
+    #     ])
+    # elif tab == 'file':
+    #     return html.Div([
+    #             # html.H3(id='title-obspy'),
+    #             dcc.Loading(
+    #                 id="loading",
+    #                 type="default",
+    #                 children=html.Div(id="loading-output")
+    #             ),
+    #             dcc.Loading(id="loading-icon",
+    #                         children=dcc.Graph(children=fig,
+    #                                            config={'displaylogo': False}),
+    #                         type="graph"),
+    #
+    #             html.Br(),
+    #             # html.H3(children='Information about data'),
+    #             # html.Div(id='output-data-upload')
+    #         ]
+    #     )
 
 
 graph_bottom = html.Div(
     [
-        html.H3("Graphics of constants", className="display-5"),
+        html.H5("Alarms", className="display-5"),
         dbc.Tabs(id="tabs-styled-with-inline",
                  children=[
-                    dbc.Tab(label='PSD', tab_id='PSD'),
-                    dbc.Tab(label='Voltage', tab_id='voltage'),
-                    dbc.Tab(label='Current', tab_id='current'),
-                    dbc.Tab(label='Intrusions', tab_id='intrusions'),
+                    dbc.Tab(label='Map', tab_id='map'),
+                    dbc.Tab(label='Alarms in progress', tab_id='alarms_in_progress'),
+                    dbc.Tab(label='Alarms completed', tab_id='alarms_completed'),
                     ],
-                 active_tab='PSD'),
+                 active_tab='map'),
         html.Div(id='tabs-content-inline')
     ],
     style=GRAPH_BOTTOM_STYLE
@@ -208,27 +351,114 @@ graph_bottom = html.Div(
 
 
 @app.callback(Output('tabs-content-inline', 'children'),
-              Input('tabs-styled-with-inline', 'active_tab'))
-def render_content(tab):
-    if tab == 'PSD':
+              Input('tabs-styled-with-inline', 'active_tab'),
+              Input('interval-alarms', 'n_intervals'),
+              prevent_initial_call=True)
+def render_content_bottom(tab, n_intervals):
+    if tab == 'map':
+        fig = go.Figure(data=go.Scattermapbox(lat=['46.932439'], lon=['104.593273'],  mode='markers',
+                                              marker=go.scattermapbox.Marker(size=14)))
+        fig.update_layout(height=450, margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                          mapbox=dict(zoom=ZOOM_MAP, style='stamen-terrain', bearing=0,
+                                      center=go.layout.mapbox.Center(lat=LAT_MAP, lon=LON_MAP), pitch=0))
+
         return html.Div([
-            html.H3("Here is the PSD")
+            dcc.Graph(figure=fig, config={'displaylogo': False})
         ])
-    elif tab == 'voltage':
-        return html.Div([
-            html.H3('Graphic of voltage')
-        ])
-    elif tab == 'current':
-        return html.Div([
-            html.H3('Graphic of the current')
-        ])
-    elif tab == 'intrusions':
-        return html.Div([
-            html.H3('Resume of the different sensors Loop, intrusion ....')
-        ])
+    elif tab == 'alarms_in_progress':
+        nc_alarms_list = []
+        try:
+            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(client.ip_address + '.' + str(client.port)))
+            alarms_server_root = alarms_server.getroot()
+
+            # display all the ongoing alarms
+            nc_alarms_inside = []
+            for alarm in alarms_server_root.findall("./ongoing/alarm"):
+                alarm_station = alarm.attrib['station']
+                alarm_state = alarm.attrib['state']
+                alarm_detail = alarm.attrib['detail']
+
+                alarm_problem = int(alarm.attrib['problem'])
+                if alarm_problem == 1:
+                    text_badge = "Warning"
+                    color = "warning"
+                else:
+                    text_badge = "Critic"
+                    color = "danger"
+
+                alarm_dt = alarm.attrib['datetime']
+                alarm_datetime = alarm_dt[1:5] + '-' + alarm_dt[5:7] + '-' + \
+                                 alarm_dt[7:9] + ' ' + alarm_dt[10:12] + ':' + \
+                                 alarm_dt[12:14] + ':' + alarm_dt[14:]
+
+                nc_alarms_inside.append(html.Tr([html.Td(alarm_datetime),
+                                                 html.Td(alarm_station),
+                                                 html.Td(alarm_state),
+                                                 html.Td(alarm_detail),
+                                                 html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))]))
+
+            table_body = [html.Tbody(nc_alarms_inside)]
+
+            nc_alarms_list = dbc.Table(table_body,
+                                       bordered=True,
+                                       dark=True,
+                                       hover=True,
+                                       responsive=True,
+                                       striped=True
+                                       )
+        except FileNotFoundError:
+            pass
+
+        return html.Div(id='tabs-content-inline', children=nc_alarms_list)
+    elif tab == 'alarms_completed':
+        c_alarms_list = []
+        try:
+            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(client.ip_address + '.' + str(client.port)))
+            alarms_server_root = alarms_server.getroot()
+
+            # display all the ongoing alarms
+            c_alarms_inside = []
+            for alarm in alarms_server_root.findall("./completed/alarm"):
+                alarm_station = alarm.attrib['station']
+                alarm_state = alarm.attrib['state']
+                alarm_detail = alarm.attrib['detail']
+
+                alarm_problem = int(alarm.attrib['problem'])
+                if alarm_problem == 1:
+                    text_badge = "Warning"
+                    color = "warning"
+                else:
+                    text_badge = "Critic"
+                    color = "danger"
+
+                alarm_dt = alarm.attrib['datetime']
+                alarm_datetime = alarm_dt[1:5] + '-' + alarm_dt[5:7] + '-' + \
+                                 alarm_dt[7:9] + ' ' + alarm_dt[10:12] + ':' + \
+                                 alarm_dt[12:14] + ':' + alarm_dt[14:]
+
+                c_alarms_inside.append(html.Tr([html.Td(alarm_datetime),
+                                                html.Td(alarm_station),
+                                                html.Td(alarm_state),
+                                                html.Td(alarm_detail),
+                                                html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))]))
+
+            table_body = [html.Tbody(c_alarms_inside)]
+
+            c_alarms_list = dbc.Table(table_body,
+                                      bordered=True,
+                                      dark=True,
+                                      hover=True,
+                                      responsive=True,
+                                      striped=True
+                                      )
+        except FileNotFoundError:
+            pass
+
+        return html.Div(id='tabs-content-inline', children=c_alarms_list)
+
 
 @app.callback(# Output('output-data-upload', 'children'),
-              Output('Trace', 'figure'),
+              Output('Trace', 'fig'),
               # Output('title-obspy', 'children'),
               # Output('data-obspy', 'data'),
               Input('upload-data', 'contents'),
@@ -279,12 +509,12 @@ def update_output(contents, names):
         fig = go.Figure()
         fig.add_trace(go.Scattergl(x=x,
                                    y=tr.data[-nb_pts::reduced_factor],
-                                   mode='lines+markers',
-                                   name='lines+markers',
+                                   mode='lines',
+                                   name='lines',
                                    ))
         # fig = px.line(df, x="Time", y="Amplitude", title='Display Trace and information of {}'.format(names[0]))
 
-        fig.update_layout(template='plotly_dark', title=names[0])
+        fig.update_layout(template='plotly_dark', title=names[0], xaxis={'autorange': True})
         children = [html.Div('{}: {}'.format(key, element)) for key, element in stats.items()]
         return fig
         # return children, fig
@@ -328,4 +558,6 @@ app.layout = html.Div([dcc.Location(id="url"), sidebar_top, sidebar_bottom, grap
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    if DEBUG is not True:
+        webbrowser.open(SERVER_DASH_PROTOCOL + SERVER_DASH_IP + ':' + str(SERVER_DASH_PORT))
+    app.run_server(host= SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG)
