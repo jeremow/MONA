@@ -12,10 +12,10 @@ import webbrowser
 import dash
 import plotly.data
 from dash.dependencies import Input, Output, State
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import dcc
+from dash import html
 import dash_bootstrap_components as dbc
-import dash_table
+from dash import dash_table
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -39,7 +39,9 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
 app.title = 'Mona-Lisa'
 client = ServerSeisComP3('0.0.0.0', '18000')
+time_graphs_names = []
 time_graphs = []
+fig_list = []
 network_list = []
 
 # logo file and decoding to display in browser
@@ -275,35 +277,76 @@ graph_top = html.Div(id='content_top_output',
               # Input('interval-component', 'n_intervals'),
               # Input('Trace', 'fig'),
               prevent_initial_call=True)
-def render_content_top(tab, value):
+def render_content_top(tab, sta_list):
     if tab == 'server':
+        global time_graphs_names
         global time_graphs
+        global fig_list
         global client
-        if value is None:
-            value = []
-        for i in range(0, len(value)):
-            full_sta_name = value[i].split('.')
-            if len(full_sta_name) == 3:
-                net = full_sta_name[0]
-                sta = full_sta_name[1]
-                loc = ''
-                cha = full_sta_name[2]
-            else:
-                net = full_sta_name[0]
-                sta = full_sta_name[1]
-                loc = full_sta_name[2]
-                cha = full_sta_name[3]
+        if sta_list is None:
+            sta_list = []
+            time_graphs_names = []
+            time_graphs = []
+            fig_list = []
+        else:
+            for i, name in enumerate(time_graphs_names):
+                if name not in sta_list:
+                    time_graphs_names.pop(i)
+                    time_graphs.pop(i)
+                    fig_list.pop(i)
 
-            st = client.get_waveforms(net, sta, loc, cha, UTCDateTime()-20, UTCDateTime()-10)
-            tr = st[0]
-            stats = tr.stats
+            t = UTCDateTime()
+            for station in sta_list:
+                if station not in time_graphs_names:
+                    full_sta_name = station.split('.')
+                    if len(full_sta_name) == 3:
+                        net = full_sta_name[0]
+                        sta = full_sta_name[1]
+                        loc = ''
+                        cha = full_sta_name[2]
+                    else:
+                        net = full_sta_name[0]
+                        sta = full_sta_name[1]
+                        loc = full_sta_name[2]
+                        cha = full_sta_name[3]
 
-            x = tr.times('UTCDateTime')
-            fig = go.Figure(data=[go.Scattergl(x=x, y=tr.data, mode='lines')])
-            # fig = px.line(df, x="Time", y="Amplitude", title='Display Trace and information of {}'.format(names[0]))
+                    st = client.get_waveforms(net, sta, loc, cha, t-UPDATE_TIME_GRAPH/1000, t)
+                    tr = st[0]
 
-            fig.update_layout(template='plotly_dark', title=value[i], xaxis={'autorange': True}, yaxis={'autorange': True})
-            time_graphs.append(dcc.Graph(figure=fig, id='time-data-'+value[i], config={'displaylogo': False}))
+                    x = tr.times('UTCDateTime')
+                    fig = plotly.subplots.make_subplots(rows=1, cols=1)
+                    plotly.graph_objects.Figure()
+                    fig.append_trace(go.Scattergl(x=x, y=tr.data, mode='lines'), row=1, col=1)
+                    # fig = px.line(df, x="Time", y="Amplitude", title='Display Trace and information of {}'.format(names[0]))
+
+                    fig.update_layout(template='plotly_dark', title=station, xaxis={'autorange': True}, yaxis={'autorange': True})
+                    fig_list.append(fig)
+                    time_graphs_names.append(station)
+                    time_graphs.append(dcc.Graph(figure=fig, id=station, config={'displaylogo': False}))
+                else:
+                    i = time_graphs_names.index(station)
+
+                    full_sta_name = station.split('.')
+                    if len(full_sta_name) == 3:
+                        net = full_sta_name[0]
+                        sta = full_sta_name[1]
+                        loc = ''
+                        cha = full_sta_name[2]
+                    else:
+                        net = full_sta_name[0]
+                        sta = full_sta_name[1]
+                        loc = full_sta_name[2]
+                        cha = full_sta_name[3]
+
+                    st = client.get_waveforms(net, sta, loc, cha, t-UPDATE_TIME_GRAPH/1000, t)
+                    tr = st[0]
+
+                    x = tr.times('UTCDateTime')
+                    fig_list[i].append_trace(go.Scattergl(x=x, y=tr.data, mode='lines'), row=1, col=1)
+                    # time_graphs.pop(i)
+                    # time_graphs.insert(i, fig_list[i])
+
+
 
         return html.Div([
             # html.H6('Connection server tab active'),
