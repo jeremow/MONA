@@ -8,6 +8,7 @@ import io
 import base64
 import os
 import webbrowser
+import logging as log
 
 import dash
 import plotly.data
@@ -274,10 +275,10 @@ graph_top = html.Div(id='content_top_output',
 @app.callback(Output('content_top_output', 'children'),
               Input('tabs-connection', 'active_tab'),
               Input('network-list-active', 'value'),
-              # Input('interval-component', 'n_intervals'),
+              Input('interval-time-graph', 'n_intervals'),
               # Input('Trace', 'fig'),
               prevent_initial_call=True)
-def render_content_top(tab, sta_list):
+def render_content_top(tab, sta_list, n_intervals):
     if tab == 'server':
         global time_graphs_names
         global time_graphs
@@ -310,13 +311,14 @@ def render_content_top(tab, sta_list):
                         loc = full_sta_name[2]
                         cha = full_sta_name[3]
 
+                    log.info(full_sta_name)
                     st = client.get_waveforms(net, sta, loc, cha, t-UPDATE_TIME_GRAPH/1000, t)
                     tr = st[0]
 
                     x = tr.times('UTCDateTime')
                     fig = plotly.subplots.make_subplots(rows=1, cols=1)
                     plotly.graph_objects.Figure()
-                    fig.append_trace(go.Scattergl(x=x, y=tr.data, mode='lines'), row=1, col=1)
+                    fig.append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False, line=dict(color="#ffe476")), row=1, col=1)
                     # fig = px.line(df, x="Time", y="Amplitude", title='Display Trace and information of {}'.format(names[0]))
 
                     fig.update_layout(template='plotly_dark', title=station, xaxis={'autorange': True}, yaxis={'autorange': True})
@@ -342,7 +344,7 @@ def render_content_top(tab, sta_list):
                     tr = st[0]
 
                     x = tr.times('UTCDateTime')
-                    fig_list[i].append_trace(go.Scattergl(x=x, y=tr.data, mode='lines'), row=1, col=1)
+                    fig_list[i].append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False, line=dict(color="#ffe476")), row=1, col=1)
                     # time_graphs.pop(i)
                     # time_graphs.insert(i, fig_list[i])
 
@@ -603,4 +605,7 @@ app.layout = html.Div([dcc.Location(id="url"), sidebar_top, sidebar_bottom, grap
 if __name__ == '__main__':
     if DEBUG is not True:
         webbrowser.open(SERVER_DASH_PROTOCOL + SERVER_DASH_IP + ':' + str(SERVER_DASH_PORT))
+    else:
+        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
+
     app.run_server(host= SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG)
