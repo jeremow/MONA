@@ -34,7 +34,7 @@ from config import *
 # sidebar connection
 from connection import *
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="")
 
 # global variables which are useful, dash will say remove these variables, I say let them exist
 server = app.server
@@ -44,6 +44,7 @@ time_graphs_names = []
 time_graphs = []
 fig_list = []
 network_list = []
+interval_time_graphs = []
 
 # logo file and decoding to display in browser
 logo_filename = 'assets/logo.jpg'
@@ -105,7 +106,8 @@ def render_connection(tab):
         dcc.Interval(
             id='interval-time-graph',
             interval=UPDATE_TIME_GRAPH,  # in milliseconds
-            n_intervals=0),
+            n_intervals=0,
+            disabled=True),
         dcc.Interval(
             id='interval-states',
             interval=UPDATE_TIME_STATES,  # in milliseconds
@@ -284,6 +286,7 @@ def render_content_top(tab, sta_list, n_intervals):
         global time_graphs
         global fig_list
         global client
+        global interval_time_graphs
         if sta_list is None:
             sta_list = []
             time_graphs_names = []
@@ -312,19 +315,24 @@ def render_content_top(tab, sta_list, n_intervals):
                         cha = full_sta_name[3]
 
                     log.info(full_sta_name)
-                    st = client.get_waveforms(net, sta, loc, cha, t-UPDATE_TIME_GRAPH/1000, t)
+                    st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
                     tr = st[0]
 
                     x = tr.times('UTCDateTime')
                     fig = plotly.subplots.make_subplots(rows=1, cols=1)
-                    plotly.graph_objects.Figure()
-                    fig.append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False, line=dict(color="#ffe476")), row=1, col=1)
-                    # fig = px.line(df, x="Time", y="Amplitude", title='Display Trace and information of {}'.format(names[0]))
+                    fig.append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False,
+                                                  line=dict(color=COLOR_TIME_GRAPH)), row=1, col=1)
 
                     fig.update_layout(template='plotly_dark', title=station, xaxis={'autorange': True}, yaxis={'autorange': True})
                     fig_list.append(fig)
                     time_graphs_names.append(station)
                     time_graphs.append(dcc.Graph(figure=fig, id=station, config={'displaylogo': False}))
+
+                    interval_time_graphs = dcc.Interval(
+                        id='interval-time-graph',
+                        interval=UPDATE_TIME_GRAPH,  # in milliseconds
+                        n_intervals=0,
+                        disabled=False)
                 else:
                     i = time_graphs_names.index(station)
 
@@ -340,19 +348,19 @@ def render_content_top(tab, sta_list, n_intervals):
                         loc = full_sta_name[2]
                         cha = full_sta_name[3]
 
-                    st = client.get_waveforms(net, sta, loc, cha, t-UPDATE_TIME_GRAPH/1000, t)
+                    st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
                     tr = st[0]
 
                     x = tr.times('UTCDateTime')
-                    fig_list[i].append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False, line=dict(color="#ffe476")), row=1, col=1)
+                    fig_list[i].append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False,
+                                                          line=dict(color=COLOR_TIME_GRAPH)), row=1, col=1)
                     # time_graphs.pop(i)
                     # time_graphs.insert(i, fig_list[i])
 
-
-
         return html.Div([
             # html.H6('Connection server tab active'),
-            html.Div(children=time_graphs)
+            html.Div(children=time_graphs),
+            html.Div(children=interval_time_graphs)
         ])
     # elif tab == 'folder':
     #     return html.Div([

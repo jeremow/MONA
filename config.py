@@ -30,3 +30,6 @@ GRAFANA_LINK: str = GRAFANA_DOMAIN + GRAFANA_DASHBOARD + '&refresh=' + \
 UPDATE_TIME_GRAPH: int = 30000  # in ms
 UPDATE_TIME_STATES: int = 30000  # in ms
 UPDATE_TIME_ALARMS: int = 30000  # in ms
+
+# STYLE
+COLOR_TIME_GRAPH: str = "#ffe476"
