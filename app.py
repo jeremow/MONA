@@ -323,7 +323,8 @@ def render_content_top(tab, sta_list, n_intervals):
                     fig.append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False,
                                                   line=dict(color=COLOR_TIME_GRAPH)), row=1, col=1)
 
-                    fig.update_layout(template='plotly_dark', title=station, xaxis={'autorange': True}, yaxis={'autorange': True})
+                    fig.update_layout(template='plotly_dark', title=station, xaxis={'range': [x[-1]-60, x[-1]]}, yaxis={'autorange': True})
+
                     fig_list.append(fig)
                     time_graphs_names.append(station)
                     time_graphs.append(dcc.Graph(figure=fig, id=station, config={'displaylogo': False}))
@@ -352,8 +353,10 @@ def render_content_top(tab, sta_list, n_intervals):
                     tr = st[0]
 
                     x = tr.times('UTCDateTime')
+                    log.info(x[-1])
                     fig_list[i].append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False,
                                                           line=dict(color=COLOR_TIME_GRAPH)), row=1, col=1)
+                    fig_list[i].update_xaxes(range=[x[-1]-60, x[-1]])
                     # time_graphs.pop(i)
                     # time_graphs.insert(i, fig_list[i])
 
