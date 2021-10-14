@@ -44,6 +44,7 @@ time_graphs_names = []
 time_graphs = []
 fig_list = []
 network_list = []
+network_list_values = []
 interval_time_graphs = []
 
 for file in os.listdir(BUFFER_DIR):
@@ -110,30 +111,35 @@ def render_connection(tab):
             html.Div(dbc.Button("Connect", id="connect-server-button", className="mr-1"),
                      style={'display': 'inline-block', 'width': '29%'}),
             html.Br(),
-        dcc.Interval(
-            id='interval-time-graph',
-            interval=UPDATE_TIME_GRAPH,  # in milliseconds
-            n_intervals=0,
-            disabled=True),
-        dcc.Interval(
-            id='interval-states',
-            interval=UPDATE_TIME_STATES,  # in milliseconds
-            n_intervals=0),
-        dcc.Interval(
-            id='interval-alarms',
-            interval=UPDATE_TIME_ALARMS,  # in milliseconds
-            n_intervals=0),
+            dcc.Interval(
+                id='interval-time-graph',
+                interval=UPDATE_TIME_GRAPH,  # in milliseconds
+                n_intervals=0,
+                disabled=True),
+            dcc.Interval(
+                id='interval-data',
+                interval=UPDATE_DATA,  # in milliseconds
+                n_intervals=0,
+                disabled=True),
+            dcc.Interval(
+                id='interval-states',
+                interval=UPDATE_TIME_STATES,  # in milliseconds
+                n_intervals=0),
+            dcc.Interval(
+                id='interval-alarms',
+                interval=UPDATE_TIME_ALARMS,  # in milliseconds
+                n_intervals=0),
             html.Br(),
             html.H4('Time graphs stations'),
             html.Div(id='container-button-basic',
                      children=[
-                         dcc.Dropdown(id='network-list-active',
-                                         placeholder='Select stations for time graphs',
-                                         options=network_list, multi=True, style={'color': 'black'}),
-                         html.P('Connection not active', style={'color': 'red'})
-                         ]
+                             dcc.Dropdown(id='network-list-active',
+                                             placeholder='Select stations for time graphs',
+                                             options=network_list, multi=True, style={'color': 'black'}),
+                             html.P('Connection not active', style={'color': 'red'})
+                             ]
                      )
-        ]
+            ]
     # elif tab == 'folder':
     #     return html.Div([
     #         html.H6('Connection to folder not implemented')
@@ -172,17 +178,25 @@ def render_connection(tab):
 )
 def connect_update_server(n_clicks, value):
     global network_list
+    global network_list_values
+
     if value is not None:
         global client
         client, ip_address, port = create_client(value)
 
-        connected = connection_client(client, ip_address, port, network_list)
+        connected = connection_client(client, ip_address, port, network_list, network_list_values)
+
         if connected == 1:
             return [
                 dcc.Dropdown(id='network-list-active',
                              placeholder='Select stations for time graphs',
                              options=network_list, multi=True, style={'color': 'black'}),
                 html.P('Connection active to {}:{}'.format(ip_address, port), style={'color': 'green'}),
+                dcc.Interval(
+                    id='interval-data',
+                    interval=UPDATE_DATA,  # in milliseconds
+                    n_intervals=0,
+                    disabled=False),
             ]
         elif connected == -1:
             return [
@@ -288,15 +302,15 @@ def update_states(station_name, n_intervals):
     return html.Div(id='health-states', children=states_list)
 
 
-graph_top = html.Div(id='content_top_output',
-                        style=GRAPH_TOP_STYLE
-                     )
+graph_top = html.Div(children=[
+    html.Div(id='content_top_output',
+             style=GRAPH_TOP_STYLE),
+    html.Div(id='output-data', hidden=True)
+              ])
 
 # CLAIREMENT LE BORDEL ICI CA VA ETRE REECRIT NO WORRY
 
 # FUNCTION TO RETRIEVE DATA AND STORE IT IN DATA BUFFER FOLDER
-
-
 
 
 @app.callback(Output('content_top_output', 'children'),
@@ -305,7 +319,7 @@ graph_top = html.Div(id='content_top_output',
               Input('interval-time-graph', 'n_intervals'),
               # Input('Trace', 'fig'),
               prevent_initial_call=True)
-def render_content_top(tab, sta_list, n_intervals):
+def render_figures_top(tab, sta_list, n_intervals):
     if tab == 'server':
         global time_graphs_names
         global time_graphs
@@ -313,7 +327,6 @@ def render_content_top(tab, sta_list, n_intervals):
         global client
         global interval_time_graphs
         if sta_list is None:
-            sta_list = []
             time_graphs_names = []
             time_graphs = []
             fig_list = []
@@ -323,9 +336,7 @@ def render_content_top(tab, sta_list, n_intervals):
                     time_graphs_names.pop(i)
                     time_graphs.pop(i)
                     fig_list.pop(i)
-                    os.remove('data/'+name+'.pkl')
 
-            t = UTCDateTime()
             for station in sta_list:
                 # ADDING NEW STATION TO THE GRAPH LIST
 
@@ -342,25 +353,31 @@ def render_content_top(tab, sta_list, n_intervals):
                         loc = full_sta_name[2]
                         cha = full_sta_name[3]
 
-                    log.info(full_sta_name)
-                    st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
-                    tr = st[0]
-
-                    x = pd.to_datetime(tr.times('timestamp'), unit='s')
-                    data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
-
                     if os.path.isdir(BUFFER_DIR) is not True:
                         os.mkdir(BUFFER_DIR)
 
-                    data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
+                    try:
+                        data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
+                    except FileNotFoundError:
+                        data_sta = pd.DataFrame({'Date': [], 'Data_Sta': []})
+
+                    date_x = data_sta['Date'].values
+                    data_sta_y = data_sta['Data_Sta'].values
 
                     fig = plotly.subplots.make_subplots(rows=1, cols=1)
-                    fig.append_trace(go.Scattergl(x=x.values, y=tr.data, mode='lines', showlegend=False,
+                    fig.append_trace(go.Scattergl(x=date_x, y=data_sta_y, mode='lines', showlegend=False,
                                                   line=dict(color=COLOR_TIME_GRAPH),
-                                                  hovertemplate='<b>Date:</b> %{x}<br><b>Val:</b> %{y}<extra></extra>'),
+                                                  hovertemplate='<b>Date:</b> %{x}<br>' +
+                                                                '<b>Val:</b> %{y}<extra></extra>'),
                                      row=1, col=1)
-
-                    fig.update_layout(template='plotly_dark', title=station, xaxis={'range': [x[-1]-TIME_DELTA, x[-1]]}, yaxis={'autorange': True})
+                    if len(date_x) != 0:
+                        fig.update_layout(template='plotly_dark', title=station,
+                                          xaxis={'range': [date_x[-1]-TIME_DELTA, date_x[-1]]},
+                                          yaxis={'autorange': True})
+                    else:
+                        fig.update_layout(template='plotly_dark', title=station,
+                                          xaxis={'autorange': True},
+                                          yaxis={'autorange': True})
 
                     fig_list.append(fig)
                     time_graphs_names.append(station)
@@ -388,34 +405,74 @@ def render_content_top(tab, sta_list, n_intervals):
                         loc = full_sta_name[2]
                         cha = full_sta_name[3]
 
-                    st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
-                    tr = st[0]
-
-                    x = pd.to_datetime(tr.times('timestamp'), unit='s')
-                    new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
-
                     try:
                         data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
-                        if len(data_sta) <= 100:
-                            data_sta = pd.concat([data_sta, new_data_sta])
-                        else:
-                            data_sta = pd.concat([data_sta[round(-len(data_sta)/2):], new_data_sta])
                     except FileNotFoundError:
-                        data_sta = new_data_sta
+                        data_sta = pd.DataFrame({'Date': [], 'Data_Sta': []})
 
-                    data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
+                    date_x = data_sta['Date'].values
+                    data_sta_y = data_sta['Data_Sta'].values
 
-                    fig_list[i].append_trace(go.Scattergl(x=x.values, y=tr.data, mode='lines', showlegend=False,
+                    fig_list[i].append_trace(go.Scattergl(x=date_x, y=data_sta_y, mode='lines', showlegend=False,
                                                           line=dict(color=COLOR_TIME_GRAPH),
-                                                          hovertemplate='<b>Date:</b> %{x}<br><b>Val:</b> %{y}<extra></extra>'),
+                                                          hovertemplate='<b>Date:</b> %{x}<br>' +
+                                                                        '<b>Val:</b> %{y}<extra></extra>'),
                                              row=1, col=1)
-                    fig_list[i].update_xaxes(range=[x[-1]-TIME_DELTA, x[-1]])
+                    fig_list[i].update_xaxes(range=[date_x[-1]-TIME_DELTA, date_x[-1]])
 
         return html.Div([
             # html.H6('Connection server tab active'),
             html.Div(children=time_graphs),
             html.Div(children=interval_time_graphs)
         ])
+
+
+@app.callback(Output('output-data', 'children'),
+              Input('tabs-connection', 'active_tab'),
+              Input('interval-data', 'n_intervals'),
+              prevent_initial_call=True)
+def update_data(tab, n_intervals):
+    if tab == 'server':
+        global network_list_values
+
+        if network_list_values:
+            if os.path.isdir(BUFFER_DIR) is not True:
+                os.mkdir(BUFFER_DIR)
+
+            t = UTCDateTime()
+
+            for station in network_list_values:
+
+                full_sta_name = station.split('.')
+                if len(full_sta_name) == 3:
+                    net = full_sta_name[0]
+                    sta = full_sta_name[1]
+                    loc = ''
+                    cha = full_sta_name[2]
+                else:
+                    net = full_sta_name[0]
+                    sta = full_sta_name[1]
+                    loc = full_sta_name[2]
+                    cha = full_sta_name[3]
+
+                st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
+                tr = st[0]
+
+                x = pd.to_datetime(tr.times('timestamp'), unit='s')
+                new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
+
+                try:
+                    data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
+                    if len(data_sta) <= 60000:
+                        data_sta = pd.concat([data_sta, new_data_sta])
+                    else:
+                        data_sta = pd.concat([data_sta[round(-len(data_sta)/2):], new_data_sta])
+                except FileNotFoundError:
+                    data_sta = new_data_sta
+
+                data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
+
+        return html.Div(id='data_output', hidden=True)
     # elif tab == 'folder':
     #     return html.Div([
     #         html.H6('Connection to Folder not implemented'),
@@ -439,8 +496,6 @@ def render_content_top(tab, sta_list, n_intervals):
     #             # html.Div(id='output-data-upload')
     #         ]
     #     )
-
-
 
 
 graph_bottom = html.Div(

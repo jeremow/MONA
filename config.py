@@ -29,7 +29,8 @@ GRAFANA_LINK: str = GRAFANA_DOMAIN + GRAFANA_DASHBOARD + '&refresh=' + \
                GRAFANA_REFRESH + '&from=' + GRAFANA_T_FROM + '&to=' + GRAFANA_T_TO
 
 # UPDATE VAR
-UPDATE_TIME_GRAPH: int = 30000  # in ms
+UPDATE_TIME_GRAPH: int = 15000  # in ms
+UPDATE_DATA: int = 30000
 UPDATE_TIME_STATES: int = 30000  # in ms
 UPDATE_TIME_ALARMS: int = 30000  # in ms
 
