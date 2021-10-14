@@ -13,17 +13,18 @@ class ServerSeisComP3(Client):
     ServerSeisComP3 class
     """
     def __init__(self, ip_address, port):
+        self.connected = False
         self.ip_address = ip_address
         self.port = int(port)
         self.info = ''
         super(ServerSeisComP3, self).__init__(server=self.ip_address, port=self.port)
 
-    def connect_to_server(self, network, station, location, channel, starttime, endtime):
-        try:
-            _ = self.get_waveforms(network, station, location, channel, starttime, endtime)
-
-        except SeedLinkException:
-            self.info = 'Config file is not matching with the SeedLink Server'
+    # def connect_to_server(self, network, station, location, channel, starttime, endtime):
+    #     try:
+    #         _ = self.get_waveforms(network, station, location, channel, starttime, endtime)
+    #
+    #     except SeedLinkException:
+    #         self.info = 'Config file is not matching with the SeedLink Server'
 
 
 def create_client(server_info):
@@ -37,7 +38,7 @@ def create_client(server_info):
 
     except IndexError:
         # Display the error message in case of an error in the writing of the IP
-        info = 'Wrong syntax of IP\n Press escape to correct.'
+        info = 'Wrong syntax of IP'
         return None
 
     else:
@@ -66,22 +67,11 @@ def connection_client(client, ip_address, port, network_list):
 
                     full_name = network_name + '.' + station_name + '.' + channel_name
                     network_list.append({'label': full_name, 'value': full_name})
-
-        s_network = network_name
-        s_station = station_name
-        s_locchan = channel_name.split('.')
-        if len(s_locchan) == 2:
-            s_location = s_locchan[0]
-            s_channel = s_locchan[1]
-        else:
-            s_location = ''
-            s_channel = s_locchan[0]
-
-        s_time = UTCDateTime() - 10
-
-        client.connect_to_server(s_network, s_station, s_location, s_channel, s_time, s_time+2)
+        return 1
 
     except FileNotFoundError:
         print('Config file of server missing.')
+        return -1
     except IndexError:
         print('Verify the config file, no station found')
+        return -2

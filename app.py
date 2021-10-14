@@ -46,6 +46,13 @@ fig_list = []
 network_list = []
 interval_time_graphs = []
 
+for file in os.listdir(BUFFER_DIR):
+    try:
+        os.remove(BUFFER_DIR+'/'+file)
+    except PermissionError:
+        log.warning('Folder in the data directory not removed.')
+        pass
+
 # logo file and decoding to display in browser
 logo_filename = 'assets/logo.jpg'
 encoded_logo = base64.b64encode(open(logo_filename, 'rb').read())
@@ -169,14 +176,28 @@ def connect_update_server(n_clicks, value):
         global client
         client, ip_address, port = create_client(value)
 
-        connection_client(client, ip_address, port, network_list)
-
-        return [
-            dcc.Dropdown(id='network-list-active',
-                         placeholder='Select stations for time graphs',
-                         options=network_list, multi=True, style={'color': 'black'}),
-            html.P('Connection active to {}:{}'.format(ip_address, port), style={'color': 'green'}),
-        ]
+        connected = connection_client(client, ip_address, port, network_list)
+        if connected == 1:
+            return [
+                dcc.Dropdown(id='network-list-active',
+                             placeholder='Select stations for time graphs',
+                             options=network_list, multi=True, style={'color': 'black'}),
+                html.P('Connection active to {}:{}'.format(ip_address, port), style={'color': 'green'}),
+            ]
+        elif connected == -1:
+            return [
+                dcc.Dropdown(id='network-list-active',
+                             placeholder='Select stations for time graphs',
+                             options=network_list, multi=True, style={'color': 'black'}),
+                html.P('Config file of server missing.'.format(ip_address, port), style={'color': 'red'}),
+            ]
+        else:
+            return [
+                dcc.Dropdown(id='network-list-active',
+                             placeholder='Select stations for time graphs',
+                             options=network_list, multi=True, style={'color': 'black'}),
+                html.P('Verify the config file, no station found.'.format(ip_address, port), style={'color': 'red'}),
+            ]
     else:
         return [
             dcc.Dropdown(id='network-list-active',
@@ -273,6 +294,10 @@ graph_top = html.Div(id='content_top_output',
 
 # CLAIREMENT LE BORDEL ICI CA VA ETRE REECRIT NO WORRY
 
+# FUNCTION TO RETRIEVE DATA AND STORE IT IN DATA BUFFER FOLDER
+
+
+
 
 @app.callback(Output('content_top_output', 'children'),
               Input('tabs-connection', 'active_tab'),
@@ -298,9 +323,12 @@ def render_content_top(tab, sta_list, n_intervals):
                     time_graphs_names.pop(i)
                     time_graphs.pop(i)
                     fig_list.pop(i)
+                    os.remove('data/'+name+'.pkl')
 
             t = UTCDateTime()
             for station in sta_list:
+                # ADDING NEW STATION TO THE GRAPH LIST
+
                 if station not in time_graphs_names:
                     full_sta_name = station.split('.')
                     if len(full_sta_name) == 3:
@@ -318,12 +346,21 @@ def render_content_top(tab, sta_list, n_intervals):
                     st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
                     tr = st[0]
 
-                    x = tr.times('UTCDateTime')
-                    fig = plotly.subplots.make_subplots(rows=1, cols=1)
-                    fig.append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False,
-                                                  line=dict(color=COLOR_TIME_GRAPH)), row=1, col=1)
+                    x = pd.to_datetime(tr.times('timestamp'), unit='s')
+                    data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
 
-                    fig.update_layout(template='plotly_dark', title=station, xaxis={'range': [x[-1]-60, x[-1]]}, yaxis={'autorange': True})
+                    if os.path.isdir(BUFFER_DIR) is not True:
+                        os.mkdir(BUFFER_DIR)
+
+                    data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
+
+                    fig = plotly.subplots.make_subplots(rows=1, cols=1)
+                    fig.append_trace(go.Scattergl(x=x.values, y=tr.data, mode='lines', showlegend=False,
+                                                  line=dict(color=COLOR_TIME_GRAPH),
+                                                  hovertemplate='<b>Date:</b> %{x}<br><b>Val:</b> %{y}<extra></extra>'),
+                                     row=1, col=1)
+
+                    fig.update_layout(template='plotly_dark', title=station, xaxis={'range': [x[-1]-TIME_DELTA, x[-1]]}, yaxis={'autorange': True})
 
                     fig_list.append(fig)
                     time_graphs_names.append(station)
@@ -334,6 +371,8 @@ def render_content_top(tab, sta_list, n_intervals):
                         interval=UPDATE_TIME_GRAPH,  # in milliseconds
                         n_intervals=0,
                         disabled=False)
+
+                # UPDATING THE EXISTING GRAPHS
                 else:
                     i = time_graphs_names.index(station)
 
@@ -352,13 +391,25 @@ def render_content_top(tab, sta_list, n_intervals):
                     st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
                     tr = st[0]
 
-                    x = tr.times('UTCDateTime')
-                    log.info(x[-1])
-                    fig_list[i].append_trace(go.Scattergl(x=x, y=tr.data, mode='lines', showlegend=False,
-                                                          line=dict(color=COLOR_TIME_GRAPH)), row=1, col=1)
-                    fig_list[i].update_xaxes(range=[x[-1]-60, x[-1]])
-                    # time_graphs.pop(i)
-                    # time_graphs.insert(i, fig_list[i])
+                    x = pd.to_datetime(tr.times('timestamp'), unit='s')
+                    new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
+
+                    try:
+                        data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
+                        if len(data_sta) <= 100:
+                            data_sta = pd.concat([data_sta, new_data_sta])
+                        else:
+                            data_sta = pd.concat([data_sta[round(-len(data_sta)/2):], new_data_sta])
+                    except FileNotFoundError:
+                        data_sta = new_data_sta
+
+                    data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
+
+                    fig_list[i].append_trace(go.Scattergl(x=x.values, y=tr.data, mode='lines', showlegend=False,
+                                                          line=dict(color=COLOR_TIME_GRAPH),
+                                                          hovertemplate='<b>Date:</b> %{x}<br><b>Val:</b> %{y}<extra></extra>'),
+                                             row=1, col=1)
+                    fig_list[i].update_xaxes(range=[x[-1]-TIME_DELTA, x[-1]])
 
         return html.Div([
             # html.H6('Connection server tab active'),
@@ -390,6 +441,8 @@ def render_content_top(tab, sta_list, n_intervals):
     #     )
 
 
+
+
 graph_bottom = html.Div(
     [
         html.H5("Alarms", className="display-5"),
@@ -412,8 +465,11 @@ graph_bottom = html.Div(
               prevent_initial_call=True)
 def render_content_bottom(tab, n_intervals):
     if tab == 'map':
-        fig = go.Figure(data=go.Scattermapbox(lat=['46.932439'], lon=['104.593273'],  mode='markers',
-                                              marker=go.scattermapbox.Marker(size=14)))
+        fig = go.Figure(data=go.Scattermapbox(lat=LIST_LAT_STA, lon=LIST_LON_STA,
+                                              text=LIST_NAME_STA, mode='markers',
+                                              hovertemplate='<b>Sta:</b> %{text}<br>' +
+                                                            '<b>Pos:</b> (%{lat}, %{lon})<extra></extra>',
+                                              marker=dict(size=12, color='rgba(17, 119, 51, 0.6)')))
         fig.update_layout(height=450, margin={"r": 0, "t": 0, "l": 0, "b": 0},
                           mapbox=dict(zoom=ZOOM_MAP, style='stamen-terrain', bearing=0,
                                       center=go.layout.mapbox.Center(lat=LAT_MAP, lon=LON_MAP), pitch=0))
@@ -619,4 +675,9 @@ if __name__ == '__main__':
     else:
         log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
 
-    app.run_server(host= SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG)
+    app.run_server(host=SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG)
+
+    # ACTIONS TO EXECUTE IF SOFTWARE QUIT
+    # #1 DELETE THE BUFFER FILES
+    for _, name in enumerate(time_graphs_names):
+        os.remove(BUFFER_DIR+'/'+name+'.pkl')

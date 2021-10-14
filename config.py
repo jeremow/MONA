@@ -1,5 +1,7 @@
 # VARIABLES TO CHANGE FOR STATION, COUNTRIES, ...
 # SERVER
+import pandas as pd
+
 SERVER_DASH_IP: str = "127.0.0.1"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"
@@ -12,8 +14,8 @@ LON_MAP: int = 104
 ZOOM_MAP: float = 4.5
 
 LIST_NAME_STA: list = ['SB1M', 'SB2M', 'SB3M', 'SB4M', 'SB5M']
-LIST_LAT_STA: list = ['47.8630']
-LIST_LON_STA: list = ['106.4039']
+LIST_LAT_STA: list = ['47.8630', '47.9630', '47.6630', '47.5630', '47.9830']
+LIST_LON_STA: list = ['106.4039', '107.4039', '108.4039', '109.4039', '110.4039']
 
 
 # GRAFANA LINK
@@ -33,3 +35,7 @@ UPDATE_TIME_ALARMS: int = 30000  # in ms
 
 # STYLE
 COLOR_TIME_GRAPH: str = "#ffe476"
+TIME_DELTA: pd.Timedelta = pd.Timedelta(60, unit='sec')
+
+# DATA BUFFER
+BUFFER_DIR: str = 'data'
