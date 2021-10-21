@@ -33,26 +33,30 @@ from config import *
 
 # sidebar connection
 from connection import *
+from retrieve_data import SeedLinkClient
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="")
 
 # global variables which are useful, dash will say remove these variables, I say let them exist
 server = app.server
 app.title = 'Mona-Lisa'
-client = ServerSeisComP3('0.0.0.0', '18000')
 time_graphs_names = []
 time_graphs = []
 fig_list = []
 network_list = []
 network_list_values = []
 interval_time_graphs = []
+# client = ServerSeisComP3('0.0.0.0', '18000')
+client = SeedLinkClient('0.0.0.0:18000', network_list, network_list_values)
 
-for file in os.listdir(BUFFER_DIR):
-    try:
+try:
+    for file in os.listdir(BUFFER_DIR):
         os.remove(BUFFER_DIR+'/'+file)
-    except PermissionError:
-        log.warning('Folder in the data directory not removed.')
-        pass
+except PermissionError:
+    log.warning('Folder in the data directory not removed.')
+except FileNotFoundError:
+    os.mkdir(BUFFER_DIR)
+
 
 # logo file and decoding to display in browser
 logo_filename = 'assets/logo.jpg'
@@ -182,35 +186,37 @@ def connect_update_server(n_clicks, value):
 
     if value is not None:
         global client
-        client, ip_address, port = create_client(value)
+        client = SeedLinkClient(value, network_list, network_list_values)
+        try:
+            client.run()
+        except SeedLinkException:
+            client.connected = 0
 
-        connected = connection_client(client, ip_address, port, network_list, network_list_values)
-
-        if connected == 1:
+        if client.connected == 1:
             return [
                 dcc.Dropdown(id='network-list-active',
                              placeholder='Select stations for time graphs',
                              options=network_list, multi=True, style={'color': 'black'}),
-                html.P('Connection active to {}:{}'.format(ip_address, port), style={'color': 'green'}),
+                html.P('Connection active to {}'.format(value), style={'color': 'green'}),
                 dcc.Interval(
                     id='interval-data',
                     interval=UPDATE_DATA,  # in milliseconds
                     n_intervals=0,
                     disabled=False),
             ]
-        elif connected == -1:
+        elif client.connected == -1:
             return [
                 dcc.Dropdown(id='network-list-active',
                              placeholder='Select stations for time graphs',
                              options=network_list, multi=True, style={'color': 'black'}),
-                html.P('Config file of server missing.'.format(ip_address, port), style={'color': 'red'}),
+                html.P('Config file of server missing.', style={'color': 'red'}),
             ]
         else:
             return [
                 dcc.Dropdown(id='network-list-active',
                              placeholder='Select stations for time graphs',
                              options=network_list, multi=True, style={'color': 'black'}),
-                html.P('Verify the config file, no station found.'.format(ip_address, port), style={'color': 'red'}),
+                html.P('Verify the config file, no station found.', style={'color': 'red'}),
             ]
     else:
         return [
@@ -370,14 +376,10 @@ def render_figures_top(tab, sta_list, n_intervals):
                                                   hovertemplate='<b>Date:</b> %{x}<br>' +
                                                                 '<b>Val:</b> %{y}<extra></extra>'),
                                      row=1, col=1)
-                    if len(date_x) != 0:
-                        fig.update_layout(template='plotly_dark', title=station,
-                                          xaxis={'range': [date_x[-1]-TIME_DELTA, date_x[-1]]},
-                                          yaxis={'autorange': True})
-                    else:
-                        fig.update_layout(template='plotly_dark', title=station,
-                                          xaxis={'autorange': True},
-                                          yaxis={'autorange': True})
+
+                    fig.update_layout(template='plotly_dark', title=station,
+                                      xaxis={'range': [date_x[-1]-TIME_DELTA, date_x[-1]]},
+                                      yaxis={'autorange': True})
 
                     fig_list.append(fig)
                     time_graphs_names.append(station)
@@ -434,43 +436,46 @@ def render_figures_top(tab, sta_list, n_intervals):
 def update_data(tab, n_intervals):
     if tab == 'server':
         global network_list_values
+        global client
 
         if network_list_values:
             if os.path.isdir(BUFFER_DIR) is not True:
                 os.mkdir(BUFFER_DIR)
 
             t = UTCDateTime()
+            client.set_delta_time(t)
+            client.run()
 
-            for station in network_list_values:
-
-                full_sta_name = station.split('.')
-                if len(full_sta_name) == 3:
-                    net = full_sta_name[0]
-                    sta = full_sta_name[1]
-                    loc = ''
-                    cha = full_sta_name[2]
-                else:
-                    net = full_sta_name[0]
-                    sta = full_sta_name[1]
-                    loc = full_sta_name[2]
-                    cha = full_sta_name[3]
-
-                st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_TIME_GRAPH/1000, t-10)
-                tr = st[0]
-
-                x = pd.to_datetime(tr.times('timestamp'), unit='s')
-                new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
-
-                try:
-                    data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
-                    if len(data_sta) <= 60000:
-                        data_sta = pd.concat([data_sta, new_data_sta])
-                    else:
-                        data_sta = pd.concat([data_sta[round(-len(data_sta)/2):], new_data_sta])
-                except FileNotFoundError:
-                    data_sta = new_data_sta
-
-                data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
+            # for station in network_list_values:
+            #
+            #     full_sta_name = station.split('.')
+            #     if len(full_sta_name) == 3:
+            #         net = full_sta_name[0]
+            #         sta = full_sta_name[1]
+            #         loc = ''
+            #         cha = full_sta_name[2]
+            #     else:
+            #         net = full_sta_name[0]
+            #         sta = full_sta_name[1]
+            #         loc = full_sta_name[2]
+            #         cha = full_sta_name[3]
+            #
+            #     st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_DATA/1000, t-10)
+            #     tr = st[0]
+            #
+            #     x = pd.to_datetime(tr.times('timestamp'), unit='s')
+            #     new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
+            #
+            #     try:
+            #         data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
+            #         if len(data_sta) <= 60000:
+            #             data_sta = pd.concat([data_sta, new_data_sta])
+            #         else:
+            #             data_sta = pd.concat([data_sta[round(-len(data_sta)/2):], new_data_sta])
+            #     except FileNotFoundError:
+            #         data_sta = new_data_sta
+            #
+            #     data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
 
         return html.Div(id='data_output', hidden=True)
     # elif tab == 'folder':

@@ -2,7 +2,7 @@
 # SIDEBAR TOP TO CONNECT TO SERVER, FOLDER, IMPORT A FILE
 
 from obspy import UTCDateTime
-from obspy.clients.seedlink import Client
+from obspy.clients.seedlink.basic_client import Client
 from obspy.clients.seedlink.seedlinkexception import SeedLinkException
 
 import xml.etree.ElementTree as ET
