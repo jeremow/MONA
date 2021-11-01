@@ -1,13 +1,13 @@
-<server ip='rtserver.ipgp.fr' port='18000'>
+<server ip="rtserver.ipgp.fr" port="18000">
 	<ongoing>
-		<alarm id="5" station="G.FDFM.00.BHZ" state="Temperature" detail="Too Low" datetime="D20210422T082453" problem='1' />
-		<alarm id="6" station="G.FDFM.00.BHZ" state="Intrusion" detail="Yes" datetime="D20210423T120242" problem='2' />
-	</ongoing>
+		</ongoing>
 
 	<completed>
-		<alarm id="1" station="G.FDFM.00.BHZ" state="Temperature" detail="Too Low" datetime="D20210422T082453" problem='1' />
-		<alarm id="2" station="G.FDFM.00.BHZ" state="Intrusion" detail="Yes" datetime="D20210423T120242" problem='2' />
-		<alarm id="3" station="G.FDFM.00.BHZ" state="Temperature" detail="Too Low" datetime="D20210422T082453" problem='1' />
-		<alarm id="4" station="G.FDFM.00.BHZ" state="Intrusion" detail="Yes" datetime="D20210423T120242" problem='2' />
+		<alarm id="G.FDFM.00.BHZ.D20210422T098454.1" station="G.FDFM.00.BHZ" state="Temperature" detail="Too Low" datetime="D20210422T098454" problem="1" />
+		<alarm id="G.FDFM.00.BHZ.D20210423T120042.1" station="G.FDFM.00.BHZ" state="Intrusion" detail="Yes" datetime="D20210423T120042" problem="2" />
+		<alarm id="G.FDFM.00.BHZ.D20210422T115236.1" station="G.FDFM.00.BHZ" state="Temperature" detail="Too Low" datetime="D20210422T115236" problem="1" />
+		<alarm id="G.FDFM.00.BHZ.D20210423T113247.1" station="G.FDFM.00.BHZ" state="Intrusion" detail="Yes" datetime="D20210423T113247" problem="2" />
+		<alarm id="G.FDFM.00.BHZ.D20210422T082453.1" station="G.FDFM.00.BHZ" state="Temperature" detail="Too Low" datetime="D20210422T082453" problem="1" />
+		<alarm id="G.FDFM.00.BHZ.D20210423T120242.1" station="G.FDFM.00.BHZ" state="Intrusion" detail="Yes" datetime="D20210423T120242" problem="2" />
 	</completed>	
 </server>

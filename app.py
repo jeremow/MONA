@@ -1,28 +1,22 @@
-# # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 #
 # # Run this app with `python app.py` and
 # # visit http://127.0.0.1:8050/ in your web browser.
 
-import time
-import io
 import base64
 import os
 import webbrowser
 import logging as log
 
 import dash
-import plotly.data
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, MATCH, ALL
 from dash import dcc
 from dash import html
 import dash_bootstrap_components as dbc
-from dash import dash_table
-import plotly.express as px
 import plotly.graph_objects as go
 
 # obspy
 from obspy import read, read_inventory
-from obspy.core import UTCDateTime
 
 # pandas
 import pandas as pd
@@ -33,7 +27,12 @@ from config import *
 
 # sidebar connection
 from connection import *
-from retrieve_data import SeedLinkClient
+# from retrieve_data import SeedLinkClient
+from retrieve_data_easySL import EasySLC
+from subprocess import Popen, CREATE_NEW_CONSOLE
+
+# for alarms
+import simpleaudio as sa
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="")
 
@@ -46,8 +45,6 @@ fig_list = []
 network_list = []
 network_list_values = []
 interval_time_graphs = []
-# client = ServerSeisComP3('0.0.0.0', '18000')
-client = SeedLinkClient('0.0.0.0:18000', network_list, network_list_values)
 
 try:
     for file in os.listdir(BUFFER_DIR):
@@ -76,6 +73,9 @@ sidebar_top = html.Div(
         dbc.Button('Open Grafana', id='btn-grafana', n_clicks=0, className="mr-1",
                    style={'display': 'inline-block', 'width': '100%'}),
         html.Br(), html.Br(),
+        dbc.Button('Alarm sound: ON', id='btn-alarm-sound', n_clicks=0, color='success', className='me-1',
+                   style={'display': 'inline-block', 'width': '100%'}),
+        html.Br(), html.Br(),
         html.Div(id="hidden-div", style={"display": "none"}),
         dbc.Tabs(id="tabs-connection",
                  children=[
@@ -100,6 +100,17 @@ def open_grafana(btn1):
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     if 'btn-grafana' in changed_id:
         webbrowser.open(GRAFANA_LINK)
+
+
+@app.callback(Output('btn-alarm-sound', 'color'),
+              Output('btn-alarm-sound', 'children'),
+              Input('btn-alarm-sound', 'n_clicks'),
+              prevent_inital_call=True)
+def change_btn(n_clicks):
+    if n_clicks % 2 == 1:
+        return 'danger', 'Alarm sound: OFF'
+    else:
+        return 'success', 'Alarm sound: ON'
 
 # INSIDE OF THE TABS
 
@@ -177,21 +188,32 @@ def render_connection(tab):
 
 @app.callback(
     dash.dependencies.Output('container-button-basic', 'children'),
-    [dash.dependencies.Input('connect-server-button', 'n_clicks')],
-    [dash.dependencies.State('input-on-submit', 'value')]
+    dash.dependencies.Input('connect-server-button', 'n_clicks'),
+    dash.dependencies.State('input-on-submit', 'value'),
 )
 def connect_update_server(n_clicks, value):
     global network_list
     global network_list_values
+    client = None
 
     if value is not None:
-        global client
-        client = SeedLinkClient(value, network_list, network_list_values)
         try:
-            client.run()
+            pass
+            client = EasySLC(value, network_list, network_list_values)
+            # client = SeedLinkClient(value, network_list, network_list_values)
         except SeedLinkException:
             client.connected = 0
 
+        server = value.split(':')
+
+        if len(server) == 1:
+            server_hostname = server[0]
+            server_port = '18000'
+        else:
+            server_hostname = server[0]
+            server_port = server[1]
+
+        Popen(["retrieve_data.bat"])
         if client.connected == 1:
             return [
                 dcc.Dropdown(id='network-list-active',
@@ -258,16 +280,28 @@ def update_list_station(children):
 @app.callback(Output('health-states', 'children'),
               Input('station-list-one-choice', 'value'),
               Input('interval-states', 'n_intervals'),
+              Input('input-on-submit', 'value'),
               prevent_initial_call=True)
-def update_states(station_name, n_intervals):
+def update_states(station_name, n_intervals, server):
     states = []
     states_list = []
+
+    if server is None:
+        server = "0.0.0.0:18000"
+    server = server.split(':')
+    if len(server) == 1:
+        server_hostname = server[0]
+        server_port = '18000'
+    else:
+        server_hostname = server[0]
+        server_port = server[1]
+
     if station_name is not None:
         split_name = station_name.split('.')
         state_network = split_name[0]
         state_station = split_name[1]
         try:
-            states_server = ET.parse('log/server/{}_states.xml'.format(client.ip_address + '.' + str(client.port)))
+            states_server = ET.parse('log/server/{}_states.xml'.format(server_hostname + '.' + server_port))
             states_server_root = states_server.getroot()
             for state in states_server_root.findall("./network[@name='{0}']/station[@name='{1}']/"
                                                     "state".format(state_network, state_station)):
@@ -309,12 +343,43 @@ def update_states(station_name, n_intervals):
 
 
 graph_top = html.Div(children=[
+    html.Div(id='alarm-alert', children=[], style=GRAPH_TOP_STYLE),
+    html.Div(id='old-number-alarms', children=0, hidden=True),
     html.Div(id='content_top_output',
              style=GRAPH_TOP_STYLE),
-    html.Div(id='output-data', hidden=True)
+    html.Div(children=None, id='data-output', hidden=True)
               ])
 
 # CLAIREMENT LE BORDEL ICI CA VA ETRE REECRIT NO WORRY
+
+
+@app.callback(Output('alarm-alert', 'children'),
+              Output('old-number-alarms', 'children'),
+              Input('number-alarms', 'children'),
+              Input('old-number-alarms', 'children'),
+              Input('btn-alarm-sound', 'n_clicks'),
+              prevent_initial_call=True)
+def create_alert(nb_alarms, old_nb_alarms, n_clicks):
+    if n_clicks % 2 == 0:
+        sound = True
+    else:
+        sound = False
+    if sound:
+        wave_obj = sa.WaveObject.from_wave_file("assets/alert-sound.wav")
+    if nb_alarms == 0:
+        if sound:
+            sa.stop_all()
+        return [], old_nb_alarms
+    elif nb_alarms <= old_nb_alarms:
+        if sound:
+            sa.stop_all()
+            wave_obj.play()
+        return dbc.Alert('Warning, alarm(s)!', color='warning', dismissable=True, is_open=True), old_nb_alarms
+    else:
+        if sound:
+            sa.stop_all()
+            wave_obj.play()
+        return dbc.Alert('Warning, new alarm(s)!', color='danger', dismissable=True, is_open=True), nb_alarms
 
 # FUNCTION TO RETRIEVE DATA AND STORE IT IN DATA BUFFER FOLDER
 
@@ -330,7 +395,6 @@ def render_figures_top(tab, sta_list, n_intervals):
         global time_graphs_names
         global time_graphs
         global fig_list
-        global client
         global interval_time_graphs
         if sta_list is None:
             time_graphs_names = []
@@ -363,22 +427,22 @@ def render_figures_top(tab, sta_list, n_intervals):
                         os.mkdir(BUFFER_DIR)
 
                     try:
-                        data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
+                        data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.data')
                     except FileNotFoundError:
-                        data_sta = pd.DataFrame({'Date': [], 'Data_Sta': []})
+                        data_sta = pd.DataFrame({'Date': [pd.to_datetime(UTCDateTime().timestamp, unit='s')], 'Data_Sta': [0]})
 
                     date_x = data_sta['Date'].values
                     data_sta_y = data_sta['Data_Sta'].values
 
-                    fig = plotly.subplots.make_subplots(rows=1, cols=1)
-                    fig.append_trace(go.Scattergl(x=date_x, y=data_sta_y, mode='lines', showlegend=False,
-                                                  line=dict(color=COLOR_TIME_GRAPH),
-                                                  hovertemplate='<b>Date:</b> %{x}<br>' +
-                                                                '<b>Val:</b> %{y}<extra></extra>'),
-                                     row=1, col=1)
+                    fig = go.Figure(go.Scattergl(x=date_x, y=data_sta_y, mode='lines', showlegend=False,
+                                                 line=dict(color=COLOR_TIME_GRAPH),
+                                                 hovertemplate='<b>Date:</b> %{x}<br>' +
+                                                               '<b>Val:</b> %{y}<extra></extra>'))
+
+                    range_x = [pd.Timestamp(date_x[-1])-TIME_DELTA, pd.Timestamp(date_x[-1])]
 
                     fig.update_layout(template='plotly_dark', title=station,
-                                      xaxis={'range': [date_x[-1]-TIME_DELTA, date_x[-1]]},
+                                      xaxis={'range': range_x},
                                       yaxis={'autorange': True})
 
                     fig_list.append(fig)
@@ -408,19 +472,21 @@ def render_figures_top(tab, sta_list, n_intervals):
                         cha = full_sta_name[3]
 
                     try:
-                        data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
+                        data_sta = pd.read_feather(BUFFER_DIR+'/'+station+'.data')
                     except FileNotFoundError:
-                        data_sta = pd.DataFrame({'Date': [], 'Data_Sta': []})
+                        data_sta = pd.DataFrame({'Date': [pd.to_datetime(UTCDateTime().timestamp, unit='s')], 'Data_Sta': [0]})
 
                     date_x = data_sta['Date'].values
                     data_sta_y = data_sta['Data_Sta'].values
 
-                    fig_list[i].append_trace(go.Scattergl(x=date_x, y=data_sta_y, mode='lines', showlegend=False,
-                                                          line=dict(color=COLOR_TIME_GRAPH),
-                                                          hovertemplate='<b>Date:</b> %{x}<br>' +
-                                                                        '<b>Val:</b> %{y}<extra></extra>'),
-                                             row=1, col=1)
-                    fig_list[i].update_xaxes(range=[date_x[-1]-TIME_DELTA, date_x[-1]])
+                    fig_list[i].add_trace(go.Scattergl(x=date_x, y=data_sta_y, mode='lines', showlegend=False,
+                                                       line=dict(color=COLOR_TIME_GRAPH),
+                                                       hovertemplate='<b>Date:</b> %{x}<br>' +
+                                                                     '<b>Val:</b> %{y}<extra></extra>'))
+
+                    range_x = [pd.Timestamp(date_x[-1]) - TIME_DELTA, pd.Timestamp(date_x[-1])]
+
+                    fig_list[i].update_xaxes(range=range_x)
 
         return html.Div([
             # html.H6('Connection server tab active'),
@@ -429,22 +495,58 @@ def render_figures_top(tab, sta_list, n_intervals):
         ])
 
 
-@app.callback(Output('output-data', 'children'),
+@app.callback(Output('data-output', 'children'),
               Input('tabs-connection', 'active_tab'),
-              Input('interval-data', 'n_intervals'),
+              # Input('interval-data', 'n_intervals'),
+              Input('network-list-active', 'value'),
+              Input('input-on-submit','value'),
+              # Input('data-output', 'children'),
               prevent_initial_call=True)
-def update_data(tab, n_intervals):
+def update_data(tab, network_list_active, submit_value):
     if tab == 'server':
+        # global network_list_values
+        global network_list
         global network_list_values
-        global client
 
-        if network_list_values:
+        if network_list_active:
             if os.path.isdir(BUFFER_DIR) is not True:
                 os.mkdir(BUFFER_DIR)
 
-            t = UTCDateTime()
-            client.set_delta_time(t)
-            client.run()
+            with open(BUFFER_DIR+'/streams.data', 'w') as streams:
+                for sta in network_list_active:
+                    streams.write('\n'+sta)
+        else:
+            try:
+                os.remove(BUFFER_DIR+'/streams.data')
+            except FileNotFoundError:
+                pass
+            # if type(client) == EasySLC:
+            #
+            #     client.on_terminate()
+            #     # client.conn.begin_time = t
+            #     for station in network_list_active:
+            #         full_sta_name = station.split('.')
+            #         if len(full_sta_name) == 3:
+            #             net = full_sta_name[0]
+            #             sta = full_sta_name[1]
+            #             cha = full_sta_name[2]
+            #         else:
+            #             net = full_sta_name[0]
+            #             sta = full_sta_name[1]
+            #             cha = full_sta_name[2] + full_sta_name[3]
+            #
+            #         client.select_stream(net, sta, cha)
+            #     client.run()
+
+
+                # t = UTCDateTime()
+                # client.set_delta_time(t)
+                # print(old_list_active)
+                # if old_list_active != network_list_active:
+                #     print(network_list_active)
+                #     client.list_to_multiselect(network_list_active)
+                #     print(client.multiselect)
+                # client.run()
 
             # for station in network_list_values:
             #
@@ -476,8 +578,10 @@ def update_data(tab, n_intervals):
             #         data_sta = new_data_sta
             #
             #     data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
-
-        return html.Div(id='data_output', hidden=True)
+        if network_list_active is not None:
+            return html.Div(children=network_list_active.copy(), id='data-output', hidden=True)
+        else:
+            return html.Div(children=[], id='data-output', hidden=True)
     # elif tab == 'folder':
     #     return html.Div([
     #         html.H6('Connection to Folder not implemented'),
@@ -512,18 +616,84 @@ graph_bottom = html.Div(
                     dbc.Tab(label='Alarms in progress', tab_id='alarms_in_progress'),
                     dbc.Tab(label='Alarms completed', tab_id='alarms_completed'),
                     ],
-                 active_tab='map'),
+                 active_tab='alarms_in_progress'),
         html.Div(id='tabs-content-inline')
     ],
     style=GRAPH_BOTTOM_STYLE
 )
 
 
+@app.callback(Output({'type': 'btn-alarm', 'id_alarm': MATCH}, 'children'),
+              Input({'type': 'btn-alarm', 'id_alarm': MATCH}, 'n_clicks'),
+              Input({'type': 'btn-alarm', 'id_alarm': MATCH}, 'id'),
+              Input('input-on-submit', 'value'))
+def complete_alarm(n_clicks, id, server):
+    if n_clicks == 0:
+        return 'Complete Alarm?'
+    elif n_clicks == 1:
+        return 'Are you sure?'
+    elif n_clicks == 2:
+        if server is None:
+            server = "0.0.0.0:18000"
+        server = server.split(':')
+        if len(server) == 1:
+            server_hostname = server[0]
+            server_port = '18000'
+        else:
+            server_hostname = server[0]
+            server_port = server[1]
+
+        try:
+            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname+'.'+server_port))
+            alarms_server_root = alarms_server.getroot()
+            alarm_to_move = alarms_server_root.find("./ongoing/alarm[@id='{}']".format(id['id_alarm']))
+            alarms_server_root[1][-1].tail = '\n\t\t'
+            alarms_server_root[1].text = "\n\t\t"
+            alarms_server_root[1].append(alarm_to_move)
+            alarms_server_root[0].remove(alarm_to_move)
+            try:
+                alarms_server_root[0][-1].tail = "\n\t"
+            except IndexError:
+                pass
+            alarms_server_root[0].text = "\n\t\t"
+            alarms_server_root[0].tail = '\n\n\t'
+            alarms_server.write('log/server/{}_alarms.xml'.format(server_hostname+'.'+server_port))
+        except FileNotFoundError:
+            print('No alarm file found in log.')
+            pass
+
+        return dbc.Badge('Alarm completed', color='success')
+    else:
+        return dbc.Badge('Alarm completed', color='success')
+
+
 @app.callback(Output('tabs-content-inline', 'children'),
               Input('tabs-styled-with-inline', 'active_tab'),
               Input('interval-alarms', 'n_intervals'),
+              Input('input-on-submit', 'value'),
               prevent_initial_call=True)
-def render_content_bottom(tab, n_intervals):
+def render_content_bottom(tab, n_intervals, server):
+    if server is None:
+        server = "0.0.0.0:18000"
+    server = server.split(':')
+    if len(server) == 1:
+        server_hostname = server[0]
+        server_port = '18000'
+    else:
+        server_hostname = server[0]
+        server_port = server[1]
+
+    # COUNTING THE ALARMS WHATEVER THE TAB
+    i = 0
+    try:
+        alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname + '.' + server_port))
+        alarms_server_root = alarms_server.getroot()
+
+        for alarm in alarms_server_root.findall("./ongoing/alarm"):
+            i = i + 1
+    except FileNotFoundError:
+        pass
+
     if tab == 'map':
         fig = go.Figure(data=go.Scattermapbox(lat=LIST_LAT_STA, lon=LIST_LON_STA,
                                               text=LIST_NAME_STA, mode='markers',
@@ -535,20 +705,25 @@ def render_content_bottom(tab, n_intervals):
                                       center=go.layout.mapbox.Center(lat=LAT_MAP, lon=LON_MAP), pitch=0))
 
         return html.Div([
-            dcc.Graph(figure=fig, config={'displaylogo': False})
+            dcc.Graph(figure=fig, config={'displaylogo': False}),
+            html.Div(id='number-alarms', children=i, hidden=True)
         ])
     elif tab == 'alarms_in_progress':
         nc_alarms_list = []
+        i = 0
         try:
-            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(client.ip_address + '.' + str(client.port)))
+            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname + '.' + server_port))
             alarms_server_root = alarms_server.getroot()
 
             # display all the ongoing alarms
             nc_alarms_inside = []
+
             for alarm in alarms_server_root.findall("./ongoing/alarm"):
+                i = i + 1
                 alarm_station = alarm.attrib['station']
                 alarm_state = alarm.attrib['state']
                 alarm_detail = alarm.attrib['detail']
+                alarm_id = alarm.attrib['id']
 
                 alarm_problem = int(alarm.attrib['problem'])
                 if alarm_problem == 1:
@@ -567,7 +742,13 @@ def render_content_bottom(tab, n_intervals):
                                                  html.Td(alarm_station),
                                                  html.Td(alarm_state),
                                                  html.Td(alarm_detail),
-                                                 html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))]))
+                                                 html.Td(dbc.Badge(text_badge, color=color, className="mr-1")),
+                                                 html.Td([dbc.Button('Complete Alarm?',
+                                                                     id={'type': 'btn-alarm',
+                                                                         'id_alarm': alarm_id},
+                                                                     className="mr-1", n_clicks=0)
+                                                          ]),
+                                                 ]))
 
             table_body = [html.Tbody(nc_alarms_inside)]
 
@@ -581,11 +762,12 @@ def render_content_bottom(tab, n_intervals):
         except FileNotFoundError:
             pass
 
-        return html.Div(id='tabs-content-inline', children=nc_alarms_list)
+        return [html.Div(id='tabs-content-inline', children=nc_alarms_list),
+                html.Div(id='number-alarms', children=i, hidden=True)]
     elif tab == 'alarms_completed':
         c_alarms_list = []
         try:
-            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(client.ip_address + '.' + str(client.port)))
+            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname + '.' + server_port))
             alarms_server_root = alarms_server.getroot()
 
             # display all the ongoing alarms
@@ -626,7 +808,8 @@ def render_content_bottom(tab, n_intervals):
         except FileNotFoundError:
             pass
 
-        return html.Div(id='tabs-content-inline', children=c_alarms_list)
+        return [html.Div(id='tabs-content-inline', children=c_alarms_list),
+                html.Div(id='number-alarms', children=i, hidden=True)]
 
 
 @app.callback(# Output('output-data-upload', 'children'),
@@ -740,4 +923,5 @@ if __name__ == '__main__':
     # ACTIONS TO EXECUTE IF SOFTWARE QUIT
     # #1 DELETE THE BUFFER FILES
     for _, name in enumerate(time_graphs_names):
-        os.remove(BUFFER_DIR+'/'+name+'.pkl')
+        os.remove(BUFFER_DIR+'/'+name+'.data')
+        os.remove(BUFFER_DIR+'/streams.data')

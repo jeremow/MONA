@@ -8,15 +8,15 @@
 	</network>
 	<network name='WI'>
 		<station name='ABD'>
-			<channel location='' name='HHZ'>
+			<channel location='00' name='HHZ'>
 			</channel>
 		</station>
 		<station name='BIM'>
-			<channel location='' name='HHZ'>
+			<channel location='00' name='HHZ'>
 			</channel>
 		</station>
 		<station name='CBE'>
-			<channel location='' name='HHZ'>
+			<channel location='00' name='HHZ'>
 			</channel>
 		</station>
 	</network>
