@@ -1,12 +1,14 @@
 import cx_Oracle
 from config import *
-import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 
 
 class HatOracleClient:
     def __init__(self):
-        cx_Oracle.init_oracle_client(CLIENT_ORACLE)
+        try:
+            cx_Oracle.init_oracle_client(CLIENT_ORACLE)
+        except cx_Oracle.ProgrammingError:
+            pass
         self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE, PORT_ORACLE, service_name='xe')
         self.conn = cx_Oracle.connect(user=r'hat', password='hat', dsn=self.dsn_tns)
         self.cursor = self.conn.cursor()
@@ -25,22 +27,22 @@ class HatOracleClient:
                 states_data += f"<station name='{sta}'>"
                 self.cursor.execute('SELECT * FROM ALARMLOG WHERE STA=:sta AND DATE1=:timestamp',
                                     sta=sta, timestamp=timestamp)
-                row = self.cursor
-                humidity, temp, alarm_loop, alarm_door, battery_voltage = row[2], row[3], row[16], row[17], row[29]
+                for row in self.cursor:
+                    humidity, temp, alarm_loop, alarm_door, battery_voltage = row[2], row[3], row[16], row[17], row[29]
 
-                self.verify_states(humidity, temp, alarm_loop, alarm_door, battery_voltage)
+                    self.verify_states(humidity, temp, alarm_loop, alarm_door, battery_voltage)
 
-                dt = f"D{timestamp.year}{timestamp.month}{timestamp.day}" \
-                     f"T{timestamp.hour}{timestamp.minute}{timestamp.second}"
-                states_data += f"""
-                <state name='Humidity' datetime='{dt}' value='{humidity}%' problem='{self.problem[0]}'/> 
-                <state name='Temperature' datetime='{dt}' value='{temp}°C' problem='{self.problem[1]}'/> 
-                <state name='Solar Panel' datetime='{dt}' value='{alarm_loop}' problem='{self.problem[2]}'/> 
-                <state name='Intrusion' datetime='{dt}' value='{alarm_door}' problem='{self.problem[3]}'/> 
-                <state name='Battery Voltage' datetime='{dt}' value='{battery_voltage}V' problem='{self.problem[4]}'/> 
-                """
+                    dt = f"D{timestamp.year}{timestamp.month}{timestamp.day}" \
+                         f"T{timestamp.hour}{timestamp.minute}{timestamp.second}"
+                    states_data += f"""
+                    <state name='Humidity' datetime='{dt}' value='{humidity}%' problem='{self.problem[0]}'/> 
+                    <state name='Temperature' datetime='{dt}' value='{temp}°C' problem='{self.problem[1]}'/> 
+                    <state name='Solar Panel' datetime='{dt}' value='{alarm_loop}' problem='{self.problem[2]}'/> 
+                    <state name='Intrusion' datetime='{dt}' value='{alarm_door}' problem='{self.problem[3]}'/> 
+                    <state name='Battery Voltage' datetime='{dt}' value='{battery_voltage}V' problem='{self.problem[4]}'/> 
+                    """
 
-                states_data += f"</station>"
+                    states_data += f"</station>"
 
             states_data += f"</server>"
 
@@ -99,3 +101,8 @@ class HatOracleClient:
 
     def close(self):
         self.conn.close()
+
+
+if __name__ == '__main__':
+    hoc = HatOracleClient()
+    hoc.write_state_health()
