@@ -24,11 +24,12 @@ import pandas as pd
 # style and config
 from assets.style import *
 from config import *
+from state_health import HatOracleClient
 
 # sidebar connection
 from connection import *
 # from retrieve_data import SeedLinkClient
-from retrieve_data_easySL import EasySLC
+from retrieve_data import EasySLC
 from subprocess import Popen, CREATE_NEW_CONSOLE
 
 # for alarms
@@ -318,9 +319,12 @@ def update_states(station_name, n_intervals, server):
             elif state[2] == 1:
                 text_badge = "Warning"
                 color = "warning"
-            else:
+            elif state[2] == 2:
                 text_badge = "Critic"
                 color = "danger"
+            else:
+                text_badge = "N/A"
+                color = "secondary"
 
             table_inside.append(html.Tr(
                 [html.Td(state[0]),

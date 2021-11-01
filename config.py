@@ -40,3 +40,10 @@ TIME_DELTA: pd.Timedelta = pd.Timedelta(60, unit='sec')
 
 # DATA BUFFER
 BUFFER_DIR: str = 'data'
+
+# HAT ORACLE CLIENT
+CLIENT_ORACLE: str = r'C:\Oracle\instantclient_11_2'
+HOST_ORACLE: str = '192.168.1.78'
+PORT_ORACLE: str = '1521'
+USER_ORACLE: str = 'hat'
+PWD_ORACLE: str = 'hat'
