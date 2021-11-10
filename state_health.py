@@ -5,6 +5,12 @@ from bs4 import BeautifulSoup
 
 
 class HatOracleClient:
+    """
+    The HatOracleClient object connect to the Oracle Client for the health states (also named HAT in mongolian).
+    It initializes with the cx_Oracle library.
+    It took out of the config.py file the CLIENT_ORACLE, HOST_ORACLE and PORT_ORACLE. Please verify the configuration
+    before using it.
+    """
     def __init__(self):
         cx_Oracle.init_oracle_client(CLIENT_ORACLE)
         self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE, PORT_ORACLE, service_name='xe')
@@ -13,6 +19,13 @@ class HatOracleClient:
         self.problem = []
 
     def write_state_health(self):
+        """
+        Pick the information needed in the Oracle Database and write it in the file log/server/states.xml.
+        The XML file will be read by main app MONA-LISA to create the table of HAT/Health States.
+
+        There are 5 basics parameters at first, but inside of this method, you'll find how to add more for your needs.
+        :return: Nothing
+        """
         try:
             stations = []
             states_data = f"<server ip='{HOST_ORACLE}' port='{PORT_ORACLE}'>"
@@ -26,9 +39,31 @@ class HatOracleClient:
                 self.cursor.execute('SELECT * FROM ALARMLOG WHERE STA=:sta AND DATE1=:timestamp',
                                     sta=sta, timestamp=timestamp)
                 row = self.cursor
-                humidity, temp, alarm_loop, alarm_door, battery_voltage = row[2], row[3], row[16], row[17], row[29]
 
-                self.verify_states(humidity, temp, alarm_loop, alarm_door, battery_voltage)
+                # HOW TO ADD A NEW PARAMETER FROM THE DATABASE OF HEALTH STATES
+                # 1: Search the row in your database and add a line below with the name of it
+                # 2: in the self.verify_states method, add the line in between the parenthesis "param=param".
+                #    Don't forget the comma at the end of the already written last parameter
+                # 3: Add a line in the variable states_data with the formatted name of your parameter "Your Param".
+                #    The name of the variable written by you with its unit {param}Unit and you add one to the number
+                #    inside of the self.problem[i+1] attribute. Format:
+                #    <state name='Your Param' datetime='{dt}' value='{param}Unit' problem='{self.problem[i+1]}'/>
+                #    Example:
+                #    <state name='Current' datetime='{dt}' value='{current}A' problem='{self.problem[5]}'/>
+                # 4: In the method verify_states, you add the line: param = parameters.pop('param', 'None')
+                # 5: You add the criteria afterwards like the model in the verify_states method.
+
+                humidity = row[2]
+                temp = row[3]
+                alarm_loop = row[16]
+                alarm_door = row[17]
+                battery_voltage = row[29]
+
+                self.verify_states(humidity=humidity,
+                                   temp=temp,
+                                   alarm_loop=alarm_loop,
+                                   alarm_door=alarm_door,
+                                   battery_voltage=battery_voltage)
 
                 dt = f"D{timestamp.year}{timestamp.month}{timestamp.day}" \
                      f"T{timestamp.hour}{timestamp.minute}{timestamp.second}"
@@ -54,15 +89,26 @@ class HatOracleClient:
         except FileNotFoundError:
             print('No states file found')
 
-    def verify_states(self, humidity, temp, alarm_loop, alarm_door, battery_voltage):
-        self.problem = []
-        if humidity is None:
+    def verify_states(self, **parameters):
+
+        humidity = parameters.pop('humidity', 'None')
+        temp = parameters.pop('temp', 'None')
+        alarm_loop = parameters.pop('alarm_loop', 'None')
+        alarm_door = parameters.pop('alarm_door', 'None')
+        battery_voltage = parameters.pop('battery_voltage', 'None')
+        # add here your new parameters
+        # current = parameters.pop('current', 'None') ...
+
+        self.problem = []  # don't touch this line
+
+        # Criteria for Humidity
+        if humidity is None:  # If no data about it, we add -1 to the list problem (it's equal to N/A)
             self.problem.append(-1)
-        elif humidity < 5 or humidity > 99:
+        elif humidity < 5 or humidity > 99:  # criteria for the critical problem, we add 2 to the list problem if happen
             self.problem.append(2)
-        elif humidity < 10 or humidity > 90:
+        elif humidity < 10 or humidity > 90:  # criteria warning problem, we add 1 the the list problem it it happens
             self.problem.append(1)
-        else:
+        else:  # else normal situation, so we add 0 to the list problem
             self.problem.append(0)
 
         if temp is None:
@@ -96,6 +142,16 @@ class HatOracleClient:
             self.problem.append(1)
         else:
             self.problem.append(0)
+
+        # Model for a new parameter called current (example)
+        # if current is None:
+        #     self.problem.append(-1)
+        # elif current < 0 or current > 3:
+        #     self.problem.append(2)
+        # elif battery_voltage < 0 or battery_voltage > 2.5:
+        #     self.problem.append(1)
+        # else:
+        #     self.problem.append(0)
 
     def close(self):
         self.conn.close()

@@ -2,6 +2,15 @@
 #
 # # Run this app with `python app.py` and
 # # visit http://127.0.0.1:8050/ in your web browser.
+#
+# MONA-LISA APP
+# Created in Mongolia in 2021 by Jeremy Hraman
+# Based on Dash with Plotly (dashboard of Python)
+#
+# Separated on different files:
+# - app.py with the main interface and algorithm
+# - retrieve_data.py for the real-time data from SeedLink server
+# - state_health.py for the Oracle Client of the HAT database of the IAG
 
 import base64
 import os
@@ -9,14 +18,14 @@ import webbrowser
 import logging as log
 
 import dash
-from dash.dependencies import Input, Output, State, MATCH, ALL
+from dash.dependencies import Input, Output, State, MATCH
 from dash import dcc
 from dash import html
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 
 # obspy
-from obspy import read, read_inventory
+from obspy import read
 
 # pandas
 import pandas as pd
@@ -24,22 +33,21 @@ import pandas as pd
 # style and config
 from assets.style import *
 from config import *
-from state_health import HatOracleClient
+from state_health import *
 
 # sidebar connection
 from connection import *
-# from retrieve_data import SeedLinkClient
 from retrieve_data import EasySLC
-from subprocess import Popen, CREATE_NEW_CONSOLE
+from subprocess import Popen
 
 # for alarms
 import simpleaudio as sa
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="")
+app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data")
+app.title = 'MONA-LISA'
 
-# global variables which are useful, dash will say remove these variables, I say let them exist
-server = app.server
-app.title = 'Mona-Lisa'
+# global variables which are useful, dash will say remove these variables, I say let them exist, else I will have
+# problems between some callbacks.
 time_graphs_names = []
 time_graphs = []
 fig_list = []
@@ -47,6 +55,7 @@ network_list = []
 network_list_values = []
 interval_time_graphs = []
 
+# Remove all the data residual files if they exist
 try:
     for file in os.listdir(BUFFER_DIR):
         os.remove(BUFFER_DIR+'/'+file)
@@ -64,6 +73,7 @@ encoded_logo = base64.b64encode(open(logo_filename, 'rb').read())
 # SIDEBAR TOP: LOGO, TITLE, CONNECTION AND CHOICE OF STATIONS FOR TIME-SERIE GRAPHS
 sidebar_top = html.Div(
     [
+        # Picture and title
         html.H2([html.Img(src='data:image/jpg;base64,{}'.format(encoded_logo.decode()), height=80), " MONA-LISA"], className="display-5"),
         html.P(
             [
@@ -71,6 +81,7 @@ sidebar_top = html.Div(
             ],
             className="lead"
         ),
+        # Button to open Grafana, Button to deactivate the alarm sound
         dbc.Button('Open Grafana', id='btn-grafana', n_clicks=0, className="mr-1",
                    style={'display': 'inline-block', 'width': '100%'}),
         html.Br(), html.Br(),
@@ -78,6 +89,7 @@ sidebar_top = html.Div(
                    style={'display': 'inline-block', 'width': '100%'}),
         html.Br(), html.Br(),
         html.Div(id="hidden-div", style={"display": "none"}),
+        # Different tabs to include further options, only server is available for the moment
         dbc.Tabs(id="tabs-connection",
                  children=[
                      dbc.Tab(label='Server', tab_id='server'),
@@ -92,12 +104,15 @@ sidebar_top = html.Div(
     style=SIDEBAR_TOP_STYLE,
 )
 
-# Grafana button to open in a new tab the constants of Roddes, Ripex, ...
-
 
 @app.callback(Output('hidden-div', 'children'),
               Input('btn-grafana', 'n_clicks'))
 def open_grafana(btn1):
+    """
+    Callback for the button of Grafana. Call the function when the button is clicked.
+    :param btn1:
+    :return:
+    """
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
     if 'btn-grafana' in changed_id:
         webbrowser.open(GRAFANA_LINK)
@@ -108,6 +123,11 @@ def open_grafana(btn1):
               Input('btn-alarm-sound', 'n_clicks'),
               prevent_inital_call=True)
 def change_btn(n_clicks):
+    """
+    Callback to turn off the alarm, and change the appearance of the button
+    :param n_clicks:
+    :return:
+    """
     if n_clicks % 2 == 1:
         return 'danger', 'Alarm sound: OFF'
     else:
@@ -119,6 +139,12 @@ def change_btn(n_clicks):
 @app.callback(Output('tabs-connection-inline', 'children'),
               Input('tabs-connection', 'active_tab'))
 def render_connection(tab):
+    """
+    Callback of the tab for the connection. If server tab is active, you can access the network list for the time graphs
+    and also to see if the connection is active
+    :param tab:
+    :return:
+    """
     if tab == 'server':
         return [
             html.Div(dbc.Input(id='input-on-submit', placeholder='URL:port', type="text", className="mb-1"),
@@ -188,11 +214,19 @@ def render_connection(tab):
 
 
 @app.callback(
-    dash.dependencies.Output('container-button-basic', 'children'),
-    dash.dependencies.Input('connect-server-button', 'n_clicks'),
-    dash.dependencies.State('input-on-submit', 'value'),
+    Output('container-button-basic', 'children'),
+    Input('connect-server-button', 'n_clicks'),
+    State('input-on-submit', 'value'),
 )
 def connect_update_server(n_clicks, value):
+    """
+    Connect to the server with the EasySLC class. This is a Seedlink client which waits for the user of MONA-LISA to
+    choose some stations. When one is selected, it will start to retrieve the data from the server.
+    :param n_clicks:
+    :param value:
+    :return:
+    """
+
     global network_list
     global network_list_values
     client = None
@@ -256,7 +290,7 @@ def connect_update_server(n_clicks, value):
 sidebar_bottom = html.Div(
     [
         html.H4('Health states'),
-        html.Div(id='station_list_div', children=dcc.Dropdown(id='station-list-one-choice',
+        html.Div(id='station-list-div', children=dcc.Dropdown(id='station-list-one-choice',
                                                               placeholder='Select a station', options=network_list,
                                                               multi=False, style={'color': 'black'})),
 
@@ -271,41 +305,55 @@ sidebar_bottom = html.Div(
 # HEALTH STATE FUNCTION TO RECOVER THE STATION FROM THE SERVER AND DISPLAY IT INTO A GOOD WAY
 
 
-@app.callback(Output('station_list_div', 'children'),
-              Input('container-button-basic', 'children'))
-def update_list_station(children):
+@app.callback(Output('station-list-div', 'children'),
+              Input('input-on-submit', 'n_clicks'),
+              prevent_initial_call=True)
+def update_list_station(n_clicks):
+    """
+    Callback for the list of stations with the States of Health (HAT Oracle server). Made especially for Mongolia.
+    :param n_clicks:
+    :return Dropdown to select the stations available:
+    """
+    station_hat_list = []
+    try:
+        config_hat_server = ET.parse('log/server/states.xml')
+        config_hat_server_root = config_hat_server.getroot()
+
+        for station in config_hat_server_root.findall("./station"):
+            station_name = station.attrib['name']
+            station_hat_list.append({'label': station_name, 'value': station_name})
+    except FileNotFoundError:
+        print('No file for Health States found. Please verify log/server/states.xml')
     return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
-                         options=network_list, multi=False, style={'color': 'black'})]
+                         options=station_hat_list, multi=False, style={'color': 'black'})]
 
 
 @app.callback(Output('health-states', 'children'),
               Input('station-list-one-choice', 'value'),
               Input('interval-states', 'n_intervals'),
-              Input('input-on-submit', 'value'),
               prevent_initial_call=True)
-def update_states(station_name, n_intervals, server):
+def update_states(station_name, n_intervals):
+    """
+
+    :param station_name:
+    :param n_intervals:
+    :return:
+    """
     states = []
     states_list = []
-
-    if server is None:
-        server = "0.0.0.0:18000"
-    server = server.split(':')
-    if len(server) == 1:
-        server_hostname = server[0]
-        server_port = '18000'
-    else:
-        server_hostname = server[0]
-        server_port = server[1]
+    try:
+        state_server = HatOracleClient()
+        state_server.write_state_health()
+        state_server.close()
+        del state_server
+    except cx_Oracle.ProgrammingError:
+        print('Connection error for HatOracleClient')
 
     if station_name is not None:
-        split_name = station_name.split('.')
-        state_network = split_name[0]
-        state_station = split_name[1]
         try:
-            states_server = ET.parse('log/server/{}_states.xml'.format(server_hostname + '.' + server_port))
+            states_server = ET.parse('log/server/states.xml')
             states_server_root = states_server.getroot()
-            for state in states_server_root.findall("./network[@name='{0}']/station[@name='{1}']/"
-                                                    "state".format(state_network, state_station)):
+            for state in states_server_root.findall(f"./station[@name='{station_name}']/state"):
                 states.append([state.attrib['name'], state.attrib['value'], int(state.attrib['problem'])])
             del states_server, states_server_root
         except FileNotFoundError:
