@@ -1,5 +1,25 @@
 MARGIN_LEFT = "20%"
 
+
+SIDEBAR_STYLE = {
+    "padding": "1rem 1rem 1rem 1rem",
+    "height": "100%",
+    # "margin-right": "2rem",
+    "background-color": "#111111",
+    "font-family": "Tw Cen MT"
+}
+
+GRAPH_STYLE = {
+    "margin-right": "2rem",
+    "padding": "1rem 2rem",
+    "font-family": "Tw Cen MT"
+}
+
+ROW = {
+    "height": "100%",
+}
+
+
 SIDEBAR_TOP_STYLE = {
     "position": "fixed",
     "top": 0,
@@ -13,7 +33,7 @@ SIDEBAR_TOP_STYLE = {
     "font-family": "Tw Cen MT"
 }
 SIDEBAR_BOTTOM_STYLE = {
-    "position": "fixed",
+    # "position": "fixed",
     "top": "60%",
     "left": 0,
     "bottom": 0,

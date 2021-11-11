@@ -16,6 +16,7 @@ import base64
 import os
 import webbrowser
 import logging as log
+import time
 
 import dash
 from dash.dependencies import Input, Output, State, MATCH
@@ -37,7 +38,7 @@ from state_health import *
 
 # sidebar connection
 from connection import *
-from retrieve_data import EasySLC
+from retrieve_data import EasySLC, SLThread
 from subprocess import Popen
 
 # for alarms
@@ -45,15 +46,22 @@ import simpleaudio as sa
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data")
 app.title = 'MONA-LISA'
-
+server = app.server
 # global variables which are useful, dash will say remove these variables, I say let them exist, else I will have
 # problems between some callbacks.
+
+try:
+    del time_graphs_names, time_graphs, fig_list, network_list, network_list_values, interval_time_graphs, client
+except NameError:
+    pass
+
 time_graphs_names = []
 time_graphs = []
 fig_list = []
 network_list = []
 network_list_values = []
 interval_time_graphs = []
+client = None
 
 # Remove all the data residual files if they exist
 try:
@@ -82,8 +90,8 @@ sidebar_top = html.Div(
             className="lead"
         ),
         # Button to open Grafana, Button to deactivate the alarm sound
-        dbc.Button('Open Grafana', id='btn-grafana', n_clicks=0, className="mr-1",
-                   style={'display': 'inline-block', 'width': '100%'}),
+        dcc.Link(dbc.Button(children='Open Grafana', target="_blank", id='btn-grafana', n_clicks=0, className="mr-1",
+                 style={'display': 'inline-block', 'width': '100%'}), href=GRAFANA_LINK, target="_blank"),
         html.Br(), html.Br(),
         dbc.Button('Alarm sound: ON', id='btn-alarm-sound', n_clicks=0, color='success', className='me-1',
                    style={'display': 'inline-block', 'width': '100%'}),
@@ -101,21 +109,8 @@ sidebar_top = html.Div(
 
     ],
 
-    style=SIDEBAR_TOP_STYLE,
+    # style=CHILD,
 )
-
-
-@app.callback(Output('hidden-div', 'children'),
-              Input('btn-grafana', 'n_clicks'))
-def open_grafana(btn1):
-    """
-    Callback for the button of Grafana. Call the function when the button is clicked.
-    :param btn1:
-    :return:
-    """
-    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
-    if 'btn-grafana' in changed_id:
-        webbrowser.open(GRAFANA_LINK)
 
 
 @app.callback(Output('btn-alarm-sound', 'color'),
@@ -229,7 +224,7 @@ def connect_update_server(n_clicks, value):
 
     global network_list
     global network_list_values
-    client = None
+    global client
 
     if value is not None:
         try:
@@ -248,8 +243,9 @@ def connect_update_server(n_clicks, value):
             server_hostname = server[0]
             server_port = server[1]
 
-        Popen(["retrieve_data.bat"])
         if client.connected == 1:
+            client_thread = SLThread('Client Thread', client)
+            client_thread.start()
             return [
                 dcc.Dropdown(id='network-list-active',
                              placeholder='Select stations for time graphs',
@@ -299,7 +295,7 @@ sidebar_bottom = html.Div(
                  )
 
     ],
-    style=SIDEBAR_BOTTOM_STYLE,
+    # style=CHILD,
 )
 
 # HEALTH STATE FUNCTION TO RECOVER THE STATION FROM THE SERVER AND DISPLAY IT INTO A GOOD WAY
@@ -334,9 +330,9 @@ def update_list_station(n_clicks):
               prevent_initial_call=True)
 def update_states(station_name, n_intervals):
     """
-
-    :param station_name:
-    :param n_intervals:
+    Callback to update the health state on the left side.
+    :param station_name: choose the name of the station to display info
+    :param n_intervals: update every n_intervals the table.
     :return:
     """
     states = []
@@ -347,6 +343,8 @@ def update_states(station_name, n_intervals):
         state_server.close()
         del state_server
     except cx_Oracle.ProgrammingError:
+        print('Connection error for HatOracleClient')
+    except cx_Oracle.DatabaseError:
         print('Connection error for HatOracleClient')
 
     if station_name is not None:
@@ -393,14 +391,15 @@ def update_states(station_name, n_intervals):
 
     return html.Div(id='health-states', children=states_list)
 
+# PART FOR ALARMS ALERT AND GRAPHS
+
 
 graph_top = html.Div(children=[
-    html.Div(id='alarm-alert', children=[], style=GRAPH_TOP_STYLE),
+    html.Div(id='alarm-alert', children=[]),
     html.Div(id='old-number-alarms', children=0, hidden=True),
-    html.Div(id='content_top_output',
-             style=GRAPH_TOP_STYLE),
-    html.Div(children=None, id='data-output', hidden=True)
-              ])
+    html.Div(id='content_top_output'),
+    html.Div(children=None, id='data-output', hidden=True),
+    html.Br()])
 
 # CLAIREMENT LE BORDEL ICI CA VA ETRE REECRIT NO WORRY
 
@@ -418,19 +417,19 @@ def create_alert(nb_alarms, old_nb_alarms, n_clicks):
         sound = False
     if sound:
         wave_obj = sa.WaveObject.from_wave_file("assets/alert-sound.wav")
+    else:
+        wave_obj = sa.WaveObject.from_wave_file("assets/alert-no-sound.wav")
+
     if nb_alarms == 0:
-        if sound:
-            sa.stop_all()
+        sa.stop_all()
         return [], old_nb_alarms
     elif nb_alarms <= old_nb_alarms:
-        if sound:
-            sa.stop_all()
-            wave_obj.play()
+        sa.stop_all()
+        wave_obj.play()
         return dbc.Alert('Warning, alarm(s)!', color='warning', dismissable=True, is_open=True), old_nb_alarms
     else:
-        if sound:
-            sa.stop_all()
-            wave_obj.play()
+        sa.stop_all()
+        wave_obj.play()
         return dbc.Alert('Warning, new alarm(s)!', color='danger', dismissable=True, is_open=True), nb_alarms
 
 # FUNCTION TO RETRIEVE DATA AND STORE IT IN DATA BUFFER FOLDER
@@ -479,7 +478,7 @@ def render_figures_top(tab, sta_list, n_intervals):
                         os.mkdir(BUFFER_DIR)
 
                     try:
-                        data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.data')
+                        data_sta = pd.read_feather(BUFFER_DIR+'/'+station+'.data')
                     except FileNotFoundError:
                         data_sta = pd.DataFrame({'Date': [pd.to_datetime(UTCDateTime().timestamp, unit='s')], 'Data_Sta': [0]})
 
@@ -551,7 +550,7 @@ def render_figures_top(tab, sta_list, n_intervals):
               Input('tabs-connection', 'active_tab'),
               # Input('interval-data', 'n_intervals'),
               Input('network-list-active', 'value'),
-              Input('input-on-submit','value'),
+              State('input-on-submit', 'value'),
               # Input('data-output', 'children'),
               prevent_initial_call=True)
 def update_data(tab, network_list_active, submit_value):
@@ -671,14 +670,14 @@ graph_bottom = html.Div(
                  active_tab='alarms_in_progress'),
         html.Div(id='tabs-content-inline')
     ],
-    style=GRAPH_BOTTOM_STYLE
+    # style=CHILD
 )
 
 
 @app.callback(Output({'type': 'btn-alarm', 'id_alarm': MATCH}, 'children'),
               Input({'type': 'btn-alarm', 'id_alarm': MATCH}, 'n_clicks'),
               Input({'type': 'btn-alarm', 'id_alarm': MATCH}, 'id'),
-              Input('input-on-submit', 'value'))
+              State('input-on-submit', 'value'))
 def complete_alarm(n_clicks, id, server):
     if n_clicks == 0:
         return 'Complete Alarm?'
@@ -722,7 +721,7 @@ def complete_alarm(n_clicks, id, server):
 @app.callback(Output('tabs-content-inline', 'children'),
               Input('tabs-styled-with-inline', 'active_tab'),
               Input('interval-alarms', 'n_intervals'),
-              Input('input-on-submit', 'value'),
+              State('input-on-submit', 'value'),
               prevent_initial_call=True)
 def render_content_bottom(tab, n_intervals, server):
     if server is None:
@@ -927,7 +926,12 @@ def update_output(contents, names):
         # return children, fig
 
 
-app.layout = html.Div([dcc.Location(id="url"), sidebar_top, sidebar_bottom, graph_top, graph_bottom])
+sidebar = dbc.Col([sidebar_top, sidebar_bottom], width=True, style=SIDEBAR_STYLE)
+graph = dbc.Col([graph_top, graph_bottom], width=9, style=GRAPH_STYLE)
+
+
+app.layout = dbc.Container(dbc.Row([dcc.Location(id="url"), sidebar, graph], style=ROW),
+                           fluid=True, style={"height": "100vh"})
 
 
 # @app.callback(Output("page-content", "children"),
@@ -970,10 +974,16 @@ if __name__ == '__main__':
     else:
         log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
 
-    app.run_server(host=SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG)
+    app.run_server(host=SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG, threaded=True)
 
     # ACTIONS TO EXECUTE IF SOFTWARE QUIT
     # #1 DELETE THE BUFFER FILES
     for _, name in enumerate(time_graphs_names):
         os.remove(BUFFER_DIR+'/'+name+'.data')
         os.remove(BUFFER_DIR+'/streams.data')
+
+    if type(client) == EasySLC:
+        client.close()
+        del client
+    else:
+        del client

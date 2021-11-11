@@ -3,19 +3,22 @@
 # Author: Jeremy
 # Description: Client Seedlink adapté à MONA DASH
 
-from obspy.clients.seedlink.easyseedlink import EasySeedLinkClient
-import xml.etree.ElementTree as ET
-from obspy.clients.seedlink.seedlinkexception import SeedLinkException
-from config import *
 import argparse
 import time
+import xml.etree.ElementTree as ET
+from threading import Thread
 
 from obspy.clients.seedlink.client.seedlinkconnection import SeedLinkConnection
+from obspy.clients.seedlink.easyseedlink import EasySeedLinkClient
+from obspy.clients.seedlink.seedlinkexception import SeedLinkException
 from obspy.clients.seedlink.slpacket import SLPacket
+
+from config import *
 
 
 class EasySLC(EasySeedLinkClient):
     def __init__(self, server_url, network_list, network_list_values):
+        self.network_list_values = network_list_values
         try:
             super(EasySLC, self).__init__(server_url)
             self.conn.timeout = 30
@@ -130,7 +133,6 @@ class EasySLC(EasySeedLinkClient):
                     self.on_data(trace)
 
     def on_terminate(self):
-
         self._EasySeedLinkClient__streaming_started = False
         self.close()
         del self.conn
@@ -151,6 +153,24 @@ class EasySLC(EasySeedLinkClient):
                                  (self.server_hostname, self.server_port))
         self.conn.streams = self.streams.copy()
         self.run()
+
+
+class SLThread(Thread):
+    def __init__(self, name, client):
+        Thread.__init__(self)
+        self.name = name
+        self.client = client
+
+    def run(self):
+        print('Starting Thread ', self.name)
+        print('Server: ', self.client.server_hostname)
+        print('Port:', self.client.server_port)
+        print("--------------------------\n")
+        print('Network list:', self.client.network_list_values)
+        self.client.run()
+
+    def close(self):
+        self.client.close()
 
 
 def get_arguments():
