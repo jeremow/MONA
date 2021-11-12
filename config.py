@@ -8,14 +8,14 @@ SERVER_DASH_PROTOCOL: str = "http://"
 DEBUG: bool = True
 
 # AREA AND STATIONS
-NAME_AREA: str = "Mongolia"
-LAT_MAP: int = 47
-LON_MAP: int = 104
-ZOOM_MAP: float = 4.5
+NAME_AREA: str = "UB (France)"
+LAT_MAP: int = 48
+LON_MAP: int = 107
+ZOOM_MAP: float = 7
 
-LIST_NAME_STA: list = ['SB1M', 'SB2M', 'SB3M', 'SB4M', 'SB5M']
-LIST_LAT_STA: list = ['47.8630', '47.9630', '47.6630', '47.5630', '47.9830']
-LIST_LON_STA: list = ['106.4039', '107.4039', '108.4039', '109.4039', '110.4039']
+LIST_NAME_STA: list = ['SEMM', 'ARTM', 'UGDM', 'ALFM']
+LIST_LAT_STA: list = ['47.561488', '47.926953', '47.638031', '48.00351']
+LIST_LON_STA: list = ['106.977964', '107.270435', '107.400533', '106.771986']
 
 
 # GRAFANA LINK
