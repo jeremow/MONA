@@ -224,6 +224,9 @@ def connect_update_server(n_clicks, value):
 
     global network_list
     global network_list_values
+    network_list = []
+    network_list_values = []
+
     global client
 
     if value is not None:
