@@ -22,6 +22,7 @@ import dash
 from dash.dependencies import Input, Output, State, MATCH
 from dash import dcc
 from dash import html
+
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 
@@ -33,7 +34,7 @@ import pandas as pd
 
 # style and config
 from assets.style import *
-from config import *
+# from config import *
 from state_health import *
 
 # sidebar connection
@@ -43,8 +44,16 @@ from subprocess import Popen
 
 # for alarms
 import simpleaudio as sa
+from simpleaudio._simpleaudio import SimpleaudioError
+from alarms import create_alarm_from_HAT
+
+BS = "https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css"
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data")
+#                 assets_folder='assets', assets_external_path="")
+app.css.config.serve_locally = True
+app.scripts.config.serve_locally = True
+
 app.title = 'MONA-LISA'
 server = app.server
 # global variables which are useful, dash will say remove these variables, I say let them exist, else I will have
@@ -143,7 +152,7 @@ def render_connection(tab):
     if tab == 'server':
         return [
             html.Div(dbc.Input(id='input-on-submit', placeholder='URL:port', type="text", className="mb-1"),
-                     style={'display': 'inline-block', 'width': '69%'}),
+                     style={'display': 'inline-block', 'width': '69%', 'textarea:color': 'white'}),
             html.Div(children=' ', style={'display': 'inline-block', 'width': '2%'}),
             html.Div(dbc.Button("Connect", id="connect-server-button", className="mr-1"),
                      style={'display': 'inline-block', 'width': '29%'}),
@@ -330,8 +339,9 @@ def update_list_station(n_clicks):
 @app.callback(Output('health-states', 'children'),
               Input('station-list-one-choice', 'value'),
               Input('interval-states', 'n_intervals'),
+              State('input-on-submit', 'value'),
               prevent_initial_call=True)
-def update_states(station_name, n_intervals):
+def update_states(station_name, n_intervals, server):
     """
     Callback to update the health state on the left side.
     :param station_name: choose the name of the station to display info
@@ -340,6 +350,7 @@ def update_states(station_name, n_intervals):
     """
     states = []
     states_list = []
+
     try:
         state_server = HatOracleClient()
         state_server.write_state_health()
@@ -392,6 +403,18 @@ def update_states(station_name, n_intervals):
                                 striped=True
                                 )
 
+    try:
+        server = server.split(':')
+        if len(server) == 1:
+            server_hostname = server[0]
+            server_port = '18000'
+        else:
+            server_hostname = server[0]
+            server_port = server[1]
+        create_alarm_from_HAT(server_hostname, server_port)
+    except AttributeError:
+        print('Wrong server to create alarms')
+
     return html.Div(id='health-states', children=states_list)
 
 # PART FOR ALARMS ALERT AND GRAPHS
@@ -428,11 +451,17 @@ def create_alert(nb_alarms, old_nb_alarms, n_clicks):
         return [], old_nb_alarms
     elif nb_alarms <= old_nb_alarms:
         sa.stop_all()
-        wave_obj.play()
+        try:
+            wave_obj.play()
+        except SimpleaudioError:
+            pass
         return dbc.Alert('Warning, alarm(s)!', color='warning', dismissable=True, is_open=True), old_nb_alarms
     else:
         sa.stop_all()
-        wave_obj.play()
+        try:
+            wave_obj.play()
+        except SimpleaudioError:
+            pass
         return dbc.Alert('Warning, new alarm(s)!', color='danger', dismissable=True, is_open=True), nb_alarms
 
 # FUNCTION TO RETRIEVE DATA AND STORE IT IN DATA BUFFER FOLDER
