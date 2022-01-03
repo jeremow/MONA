@@ -13,10 +13,12 @@
 # - state_health.py for the Oracle Client of the HAT database of the IAG
 
 import base64
+import glob
 import os
 import webbrowser
 import logging as log
 import time
+from threading import ThreadError
 
 import dash
 from dash.dependencies import Input, Output, State, MATCH
@@ -36,6 +38,8 @@ import pandas as pd
 from assets.style import *
 # from config import *
 from state_health import *
+from utils import get_network_list, delete_residual_data
+from bs4 import BeautifulSoup as BS
 
 # sidebar connection
 from connection import *
@@ -47,10 +51,8 @@ import simpleaudio as sa
 from simpleaudio._simpleaudio import SimpleaudioError
 from alarms import create_alarm_from_HAT
 
-BS = "https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css"
-
 app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data")
-#                 assets_folder='assets', assets_external_path="")
+
 app.css.config.serve_locally = True
 app.scripts.config.serve_locally = True
 
@@ -71,16 +73,10 @@ network_list = []
 network_list_values = []
 interval_time_graphs = []
 client = None
+client_thread = None
 
 # Remove all the data residual files if they exist
-try:
-    for file in os.listdir(BUFFER_DIR):
-        os.remove(BUFFER_DIR+'/'+file)
-except PermissionError:
-    log.warning('Folder in the data directory not removed.')
-except FileNotFoundError:
-    os.mkdir(BUFFER_DIR)
-
+delete_residual_data()
 
 # logo file and decoding to display in browser
 logo_filename = 'assets/logo.jpg'
@@ -110,7 +106,7 @@ sidebar_top = html.Div(
         dbc.Tabs(id="tabs-connection",
                  children=[
                      dbc.Tab(label='Server', tab_id='server'),
-                     dbc.Tab(label='Folder', tab_id='folder', disabled=True),
+                     dbc.Tab(label='SDS Folder', tab_id='folder', disabled=False),
                      dbc.Tab(label='File', tab_id='file', disabled=True),
                  ],
                  active_tab='server'),
@@ -132,7 +128,7 @@ def change_btn(n_clicks):
     :param n_clicks:
     :return:
     """
-    if n_clicks % 2 == 1:
+    if n_clicks % 2 == 0:
         return 'danger', 'Alarm sound: OFF'
     else:
         return 'success', 'Alarm sound: ON'
@@ -184,12 +180,68 @@ def render_connection(tab):
                                              options=network_list, multi=True, style={'color': 'black'}),
                              html.P('Connection not active', style={'color': 'red'})
                              ]
-                     )
+                     ),
+            dbc.RadioItems(
+                id='realtime-radiobox',
+                options=[
+                    {'label': 'Real-Time', 'value': 'realtime'},
+                    {'label': 'Data Retrieval', 'value': 'retrieval', 'disabled': True}
+                ],
+                value='realtime',
+                inline=True
+            ),
+            html.Div(id='date-picker', children=[]),
+            html.Br()
             ]
-    # elif tab == 'folder':
-    #     return html.Div([
-    #         html.H6('Connection to folder not implemented')
-    #     ])
+    elif tab == 'folder':
+        return [
+            html.Div(dbc.Input(id='input-on-submit', placeholder='/path/to/SDS', type="text", className="mb-1"),
+                     style={'display': 'inline-block', 'width': '69%', 'textarea:color': 'white'}),
+            html.Div(children=' ', style={'display': 'inline-block', 'width': '2%'}),
+            html.Div(dbc.Button("Connect", id="connect-server-button", className="mr-1"),
+                     style={'display': 'inline-block', 'width': '29%'}),
+            html.Br(),
+            dcc.Interval(
+                id='interval-time-graph',
+                interval=UPDATE_TIME_GRAPH,  # in milliseconds
+                n_intervals=0,
+                disabled=True),
+            dcc.Interval(
+                id='interval-data',
+                interval=UPDATE_DATA,  # in milliseconds
+                n_intervals=0,
+                disabled=True),
+            dcc.Interval(
+                id='interval-states',
+                interval=UPDATE_TIME_STATES,  # in milliseconds
+                n_intervals=0),
+            dcc.Interval(
+                id='interval-alarms',
+                interval=UPDATE_TIME_ALARMS,  # in milliseconds
+                n_intervals=0),
+            html.Br(),
+
+            html.H4('Time graphs stations'),
+            html.Div(id='container-button-basic',
+                     children=[
+                             dcc.Dropdown(id='network-list-active',
+                                             placeholder='Select stations for time graphs',
+                                             options=network_list, multi=True, style={'color': 'black'}),
+                             html.P('Folder not active', style={'color': 'red'})
+                             ]
+                     ),
+            dbc.RadioItems(
+                id='realtime-radiobox',
+                options=[
+                    {'label': 'Real-Time', 'value': 'realtime'},
+                    {'label': 'Data Retrieval', 'value': 'retrieval', 'disabled': True}
+                ],
+                value='realtime',
+                inline=True
+            ),
+            html.Div(id='date-picker', children=[]),
+            html.Br()
+            ]
     # elif tab == 'file':
     #     return html.Div([
     #         html.H6('Connection through file'),
@@ -217,12 +269,110 @@ def render_connection(tab):
 # CONNECTION TO THE SERVER TAB
 
 
+@app.callback(Output('date-picker', 'children'),
+              Input('realtime-radiobox', 'value'),
+              Input('tabs-connection', 'active_tab'))
+def display_data_retrieval(value, tab):
+    global client
+    global client_thread
+    if value == 'realtime':
+        if tab == 'server':
+            delete_residual_data(delete_streams=False)
+            try:
+                client.data_retrieval = False
+                client_thread.close()
+                client_thread = SLThread('Client SL Realtime', client)
+                client_thread.start()
+            except AttributeError:
+                pass
+        return []
+    else:
+        if tab == 'server':
+            try:
+                client.data_retrieval = True
+                client_thread.close()
+            except AttributeError:
+                pass
+
+        return [dcc.DatePickerSingle(id='date-picker-dcc', date=UTCDateTime().date,
+                                     display_format='YYYY/MM/DD', number_of_months_shown=2,
+                                     style={'display': 'inline-block', 'width': '40%'}),
+                dbc.Input(id="input-hour", type="number", placeholder="HH", min=0, max=23, step=1,
+                          style={'display': 'inline-block', 'width': '20%'}),
+                dbc.Input(id="input-min", type="number", placeholder="MM", min=0, max=59, step=1,
+                          style={'display': 'inline-block', 'width': '20%'}),
+                dbc.Input(id="input-sec", type="number", placeholder="SS", min=0, max=59, step=1,
+                          style={'display': 'inline-block', 'width': '20%'}),
+                html.Br(),
+                'Duration: ',
+                dbc.Input(id="input-period", type="number", value=1, min=1, max=59, step=1,
+                          style={'display': 'inline-block', 'width': "20%"}),
+                dbc.Select(id='select-period',
+                           options=[
+                               {"label": "day", "value": "day"},
+                               {"label": "hour", "value": "hour"},
+                               {"label": "min", "value": "min"},
+                               {"label": "sec", "value": "sec"},
+                           ],
+                           value='hour',
+                           style={'display': 'inline-block', 'width':"20%"}),
+                '  ',
+                dbc.Button("Retrieve Data", id='retrieve-data-btn', color="success",
+                           className="mb-1", n_clicks=0, style={'display': 'inline-block'}),
+                html.Br()]
+
+
+@app.callback(
+    Output('retrieve-data-btn', 'n_clicks'),
+    Input('retrieve-data-btn', 'n_clicks'),
+    Input('date-picker-dcc', 'date'),
+    Input('input-hour', 'value'),
+    Input('input-min', 'value'),
+    Input('input-sec', 'value'),
+    Input('input-period', 'value'),
+    Input('select-period', 'value'),
+    Input('tabs-connection', 'active_tab'),
+    prevent_initial_call=True
+)
+def get_data_from_retrieval(n_clicks, date, hour, min, sec, period_value, period, tab):
+    if tab == 'server':
+        global client
+        global client_thread
+        if n_clicks > 0:
+            delete_residual_data(delete_streams=False)
+            try:
+                date = date.split('-')
+                year = date[0]
+                month = date[1]
+                day = date[2]
+                begin_time = f'{year},{month},{day},{hour},{min},{sec}'
+                client.begin_time = begin_time
+                if period == 'day':
+                    factor = 86400
+                elif period == 'hour':
+                    factor = 3600
+                elif period == 'min':
+                    factor = 60
+                else:
+                    factor = 1
+                duration = factor * period_value
+                end_time = (UTCDateTime(begin_time) + duration).format_seedlink()
+                client.end_time = end_time
+                client_thread = SLThread('Client SL Data Retrieval', client)
+                client_thread.start()
+            except AttributeError:
+                print('Client not initialised')
+
+    return 0
+
+
 @app.callback(
     Output('container-button-basic', 'children'),
     Input('connect-server-button', 'n_clicks'),
     State('input-on-submit', 'value'),
+    Input('tabs-connection', 'active_tab'),
 )
-def connect_update_server(n_clicks, value):
+def connect_update_server(n_clicks, value, tab):
     """
     Connect to the server with the EasySLC class. This is a Seedlink client which waits for the user of MONA-LISA to
     choose some stations. When one is selected, it will start to retrieve the data from the server.
@@ -231,65 +381,100 @@ def connect_update_server(n_clicks, value):
     :return:
     """
 
+    global client
+    global client_thread
     global network_list
     global network_list_values
     network_list = []
     network_list_values = []
 
-    global client
+    if tab == 'server':
+        if value is not None:
+            try:
+                pass
+                client = EasySLC(value, network_list, network_list_values)
+                # client = SeedLinkClient(value, network_list, network_list_values)
+            except SeedLinkException:
+                client.connected = 0
 
-    if value is not None:
-        try:
-            pass
-            client = EasySLC(value, network_list, network_list_values)
-            # client = SeedLinkClient(value, network_list, network_list_values)
-        except SeedLinkException:
-            client.connected = 0
-
-        server = value.split(':')
-
-        if len(server) == 1:
-            server_hostname = server[0]
-            server_port = '18000'
+            if client.connected == 1:
+                try:
+                    client_thread.close()
+                except AttributeError:
+                    pass
+                if client.data_retrieval is False:
+                    client_thread = SLThread('Client SL Realtime', client)
+                    client_thread.start()
+                return [
+                    dcc.Dropdown(id='network-list-active',
+                                 placeholder='Select stations for time graphs',
+                                 options=network_list, multi=True, style={'color': 'black'}),
+                    html.P('Connection active to {}'.format(value), style={'color': 'green'}),
+                    dcc.Interval(
+                        id='interval-data',
+                        interval=UPDATE_DATA,  # in milliseconds
+                        n_intervals=0,
+                        disabled=False),
+                ]
+            elif client.connected == -1:
+                return [
+                    dcc.Dropdown(id='network-list-active',
+                                 placeholder='Select stations for time graphs',
+                                 options=network_list, multi=True, style={'color': 'black'}),
+                    html.P('Config file of server missing.', style={'color': 'red'}),
+                ]
+            else:
+                return [
+                    dcc.Dropdown(id='network-list-active',
+                                 placeholder='Select stations for time graphs',
+                                 options=network_list, multi=True, style={'color': 'black'}),
+                    html.P('Verify the config file, no station found.', style={'color': 'red'}),
+                ]
         else:
-            server_hostname = server[0]
-            server_port = server[1]
-
-        if client.connected == 1:
-            client_thread = SLThread('Client Thread', client)
-            client_thread.start()
             return [
                 dcc.Dropdown(id='network-list-active',
                              placeholder='Select stations for time graphs',
-                             options=network_list, multi=True, style={'color': 'black'}),
-                html.P('Connection active to {}'.format(value), style={'color': 'green'}),
-                dcc.Interval(
-                    id='interval-data',
-                    interval=UPDATE_DATA,  # in milliseconds
-                    n_intervals=0,
-                    disabled=False),
+                             options=[], multi=True, style={'color': 'black'}),
+                html.P('Connection not active', style={'color': 'red'}),
             ]
-        elif client.connected == -1:
-            return [
-                dcc.Dropdown(id='network-list-active',
-                             placeholder='Select stations for time graphs',
-                             options=network_list, multi=True, style={'color': 'black'}),
-                html.P('Config file of server missing.', style={'color': 'red'}),
-            ]
+    elif tab == 'folder':
+        if value is not None and os.path.isdir(value):
+            connected = get_network_list('folder', network_list, network_list_values, folder_file='stations.xml')
+            if connected is not None:
+                if connected == 1:
+                    return [
+                            dcc.Dropdown(id='network-list-active',
+                                         placeholder='Select stations for time graphs',
+                                         options=network_list, multi=True, style={'color': 'black'}),
+                            html.P('Connection active to {}'.format(value), style={'color': 'green'}),
+                            dcc.Interval(
+                                id='interval-data',
+                                interval=UPDATE_DATA,  # in milliseconds
+                                n_intervals=0,
+                                disabled=False)
+                        ]
+                elif connected == -1:
+                    return [
+                        dcc.Dropdown(id='network-list-active',
+                                     placeholder='Select stations for time graphs',
+                                     options=network_list, multi=True, style={'color': 'black'}),
+                        html.P('Config file of folder missing.', style={'color': 'red'}),
+                    ]
+                else:
+                    return [
+                        dcc.Dropdown(id='network-list-active',
+                                     placeholder='Select stations for time graphs',
+                                     options=network_list, multi=True, style={'color': 'black'}),
+                        html.P('Verify the config file, no station found.', style={'color': 'red'}),
+                    ]
         else:
             return [
                 dcc.Dropdown(id='network-list-active',
                              placeholder='Select stations for time graphs',
-                             options=network_list, multi=True, style={'color': 'black'}),
-                html.P('Verify the config file, no station found.', style={'color': 'red'}),
+                             options=[], multi=True, style={'color': 'black'}),
+                html.P('Connection not active', style={'color': 'red'}),
             ]
-    else:
-        return [
-            dcc.Dropdown(id='network-list-active',
-                         placeholder='Select stations for time graphs',
-                         options=[], multi=True, style={'color': 'black'}),
-            html.P('Connection not active', style={'color': 'red'}),
-        ]
+
 
 
 # SIDEBAR BOTTOM: HEALTH STATES
@@ -339,9 +524,9 @@ def update_list_station(n_clicks):
 @app.callback(Output('health-states', 'children'),
               Input('station-list-one-choice', 'value'),
               Input('interval-states', 'n_intervals'),
-              State('input-on-submit', 'value'),
+              State('tabs-connection', 'active_tab'),
               prevent_initial_call=True)
-def update_states(station_name, n_intervals, server):
+def update_states(station_name, n_intervals, tab):
     """
     Callback to update the health state on the left side.
     :param station_name: choose the name of the station to display info
@@ -363,11 +548,13 @@ def update_states(station_name, n_intervals, server):
 
     if station_name is not None:
         try:
-            states_server = ET.parse('log/server/states.xml')
-            states_server_root = states_server.getroot()
-            for state in states_server_root.findall(f"./station[@name='{station_name}']/state"):
-                states.append([state.attrib['name'], state.attrib['value'], int(state.attrib['problem'])])
-            del states_server, states_server_root
+            with open(f'log/{tab}/states.xml', 'r', encoding='utf-8') as fp:
+                content = fp.read()
+                bs_states = BS(content, 'lxml-xml')
+            bs_station = bs_states.find('station', {'name': station_name})
+            for state in bs_station.find_all('state'):
+                states.append([state.get('name'), state.get('value'), int(state.get('problem'))])
+
         except FileNotFoundError:
             pass
 
@@ -404,14 +591,7 @@ def update_states(station_name, n_intervals, server):
                                 )
 
     try:
-        server = server.split(':')
-        if len(server) == 1:
-            server_hostname = server[0]
-            server_port = '18000'
-        else:
-            server_hostname = server[0]
-            server_port = server[1]
-        create_alarm_from_HAT(server_hostname, server_port)
+        create_alarm_from_HAT(tab)
     except AttributeError:
         print('Wrong server to create alarms')
 
@@ -438,9 +618,9 @@ graph_top = html.Div(children=[
               prevent_initial_call=True)
 def create_alert(nb_alarms, old_nb_alarms, n_clicks):
     if n_clicks % 2 == 0:
-        sound = True
-    else:
         sound = False
+    else:
+        sound = True
     if sound:
         wave_obj = sa.WaveObject.from_wave_file("assets/alert-sound.wav")
     else:
@@ -475,6 +655,7 @@ def create_alert(nb_alarms, old_nb_alarms, n_clicks):
               prevent_initial_call=True)
 def render_figures_top(tab, sta_list, n_intervals):
     if tab == 'server':
+        global client
         global time_graphs_names
         global time_graphs
         global fig_list
@@ -494,18 +675,6 @@ def render_figures_top(tab, sta_list, n_intervals):
                 # ADDING NEW STATION TO THE GRAPH LIST
 
                 if station not in time_graphs_names:
-                    full_sta_name = station.split('.')
-                    if len(full_sta_name) == 3:
-                        net = full_sta_name[0]
-                        sta = full_sta_name[1]
-                        loc = ''
-                        cha = full_sta_name[2]
-                    else:
-                        net = full_sta_name[0]
-                        sta = full_sta_name[1]
-                        loc = full_sta_name[2]
-                        cha = full_sta_name[3]
-
                     if os.path.isdir(BUFFER_DIR) is not True:
                         os.mkdir(BUFFER_DIR)
 
@@ -542,18 +711,6 @@ def render_figures_top(tab, sta_list, n_intervals):
                 else:
                     i = time_graphs_names.index(station)
 
-                    full_sta_name = station.split('.')
-                    if len(full_sta_name) == 3:
-                        net = full_sta_name[0]
-                        sta = full_sta_name[1]
-                        loc = ''
-                        cha = full_sta_name[2]
-                    else:
-                        net = full_sta_name[0]
-                        sta = full_sta_name[1]
-                        loc = full_sta_name[2]
-                        cha = full_sta_name[3]
-
                     try:
                         data_sta = pd.read_feather(BUFFER_DIR+'/'+station+'.data')
                     except FileNotFoundError:
@@ -566,10 +723,16 @@ def render_figures_top(tab, sta_list, n_intervals):
                                                        line=dict(color=COLOR_TIME_GRAPH),
                                                        hovertemplate='<b>Date:</b> %{x}<br>' +
                                                                      '<b>Val:</b> %{y}<extra></extra>'))
-
-                    range_x = [pd.Timestamp(date_x[-1]) - TIME_DELTA, pd.Timestamp(date_x[-1])]
-
-                    fig_list[i].update_xaxes(range=range_x)
+                    try:
+                        if client.data_retrieval is False:
+                            range_x = [pd.Timestamp(date_x[-1]) - TIME_DELTA, pd.Timestamp(date_x[-1])]
+                            fig_list[i].update_xaxes(range=range_x)
+                        else:
+                            range_x = [pd.Timestamp(date_x[0]), pd.Timestamp(date_x[-1])]
+                            fig_list[i].update_xaxes(range=range_x)
+                    except AttributeError:
+                        range_x = [pd.Timestamp(date_x[-1]) - TIME_DELTA, pd.Timestamp(date_x[-1])]
+                        fig_list[i].update_xaxes(range=range_x)
 
         return html.Div([
             # html.H6('Connection server tab active'),
@@ -603,73 +766,18 @@ def update_data(tab, network_list_active, submit_value):
                 os.remove(BUFFER_DIR+'/streams.data')
             except FileNotFoundError:
                 pass
-            # if type(client) == EasySLC:
-            #
-            #     client.on_terminate()
-            #     # client.conn.begin_time = t
-            #     for station in network_list_active:
-            #         full_sta_name = station.split('.')
-            #         if len(full_sta_name) == 3:
-            #             net = full_sta_name[0]
-            #             sta = full_sta_name[1]
-            #             cha = full_sta_name[2]
-            #         else:
-            #             net = full_sta_name[0]
-            #             sta = full_sta_name[1]
-            #             cha = full_sta_name[2] + full_sta_name[3]
-            #
-            #         client.select_stream(net, sta, cha)
-            #     client.run()
 
-
-                # t = UTCDateTime()
-                # client.set_delta_time(t)
-                # print(old_list_active)
-                # if old_list_active != network_list_active:
-                #     print(network_list_active)
-                #     client.list_to_multiselect(network_list_active)
-                #     print(client.multiselect)
-                # client.run()
-
-            # for station in network_list_values:
-            #
-            #     full_sta_name = station.split('.')
-            #     if len(full_sta_name) == 3:
-            #         net = full_sta_name[0]
-            #         sta = full_sta_name[1]
-            #         loc = ''
-            #         cha = full_sta_name[2]
-            #     else:
-            #         net = full_sta_name[0]
-            #         sta = full_sta_name[1]
-            #         loc = full_sta_name[2]
-            #         cha = full_sta_name[3]
-            #
-            #     st = client.get_waveforms(net, sta, loc, cha, t-10-UPDATE_DATA/1000, t-10)
-            #     tr = st[0]
-            #
-            #     x = pd.to_datetime(tr.times('timestamp'), unit='s')
-            #     new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
-            #
-            #     try:
-            #         data_sta = pd.read_pickle(BUFFER_DIR+'/'+station+'.pkl')
-            #         if len(data_sta) <= 60000:
-            #             data_sta = pd.concat([data_sta, new_data_sta])
-            #         else:
-            #             data_sta = pd.concat([data_sta[round(-len(data_sta)/2):], new_data_sta])
-            #     except FileNotFoundError:
-            #         data_sta = new_data_sta
-            #
-            #     data_sta.to_pickle(BUFFER_DIR+'/'+station+'.pkl')
         if network_list_active is not None:
             return html.Div(children=network_list_active.copy(), id='data-output', hidden=True)
         else:
             return html.Div(children=[], id='data-output', hidden=True)
-    # elif tab == 'folder':
-    #     return html.Div([
-    #         html.H6('Connection to Folder not implemented'),
-    #
-    #     ])
+
+    elif tab == 'folder':
+
+        return html.Div([
+            html.H6('Connection to Folder not implemented'),
+
+        ])
     # elif tab == 'file':
     #     return html.Div([
     #             # html.H3(id='title-obspy'),
@@ -709,38 +817,31 @@ graph_bottom = html.Div(
 @app.callback(Output({'type': 'btn-alarm', 'id_alarm': MATCH}, 'children'),
               Input({'type': 'btn-alarm', 'id_alarm': MATCH}, 'n_clicks'),
               Input({'type': 'btn-alarm', 'id_alarm': MATCH}, 'id'),
-              State('input-on-submit', 'value'))
-def complete_alarm(n_clicks, id, server):
+              # State('input-on-submit', 'value'),
+              State('tabs-connection', 'active_tab'))
+def complete_alarm(n_clicks, _id, tab):
     if n_clicks == 0:
         return 'Complete Alarm?'
     elif n_clicks == 1:
         return 'Are you sure?'
     elif n_clicks == 2:
-        if server is None:
-            server = "0.0.0.0:18000"
-        server = server.split(':')
-        if len(server) == 1:
-            server_hostname = server[0]
-            server_port = '18000'
-        else:
-            server_hostname = server[0]
-            server_port = server[1]
-
         try:
-            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname+'.'+server_port))
-            alarms_server_root = alarms_server.getroot()
-            alarm_to_move = alarms_server_root.find("./ongoing/alarm[@id='{}']".format(id['id_alarm']))
-            alarms_server_root[1][-1].tail = '\n\t\t'
-            alarms_server_root[1].text = "\n\t\t"
-            alarms_server_root[1].append(alarm_to_move)
-            alarms_server_root[0].remove(alarm_to_move)
-            try:
-                alarms_server_root[0][-1].tail = "\n\t"
-            except IndexError:
-                pass
-            alarms_server_root[0].text = "\n\t\t"
-            alarms_server_root[0].tail = '\n\n\t'
-            alarms_server.write('log/server/{}_alarms.xml'.format(server_hostname+'.'+server_port))
+            with open(f'log/{tab}/alarms.xml', 'r', encoding='utf-8') as fp:
+                content = fp.read()
+                bs_alarms = BS(content, 'lxml-xml')
+            bs_alarms_tag = bs_alarms.find('alarms')
+            bs_ongoing = bs_alarms.find('ongoing')
+            bs_completed = bs_alarms.find('completed')
+
+            if bs_completed is None:
+                bs_completed = bs_alarms_tag.new_tag('completed')
+
+            bs_alarm_to_move = bs_ongoing.find('alarm', {'id': _id['id_alarm']})
+            bs_completed.append(bs_alarm_to_move)
+            bs_alarms_tag.append(bs_completed)
+
+            with open(f"log/{tab}/alarms.xml", 'w', encoding='utf-8') as fp:
+                fp.write(bs_alarms.prettify())
         except FileNotFoundError:
             print('No alarm file found in log.')
             pass
@@ -753,27 +854,23 @@ def complete_alarm(n_clicks, id, server):
 @app.callback(Output('tabs-content-inline', 'children'),
               Input('tabs-styled-with-inline', 'active_tab'),
               Input('interval-alarms', 'n_intervals'),
-              State('input-on-submit', 'value'),
+              State('tabs-connection', 'active_tab'),
               prevent_initial_call=True)
-def render_content_bottom(tab, n_intervals, server):
-    if server is None:
-        server = "0.0.0.0:18000"
-    server = server.split(':')
-    if len(server) == 1:
-        server_hostname = server[0]
-        server_port = '18000'
-    else:
-        server_hostname = server[0]
-        server_port = server[1]
+def update_alarms(tab, n_intervals, type_connection):
 
     # COUNTING THE ALARMS WHATEVER THE TAB
     i = 0
     try:
-        alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname + '.' + server_port))
-        alarms_server_root = alarms_server.getroot()
 
-        for alarm in alarms_server_root.findall("./ongoing/alarm"):
-            i = i + 1
+        with open(f'log/{type_connection}/alarms.xml', 'r', encoding='utf-8') as fp:
+            content = fp.read()
+            bs_alarms = BS(content, 'lxml-xml')
+
+        bs_ongoing = bs_alarms.find('ongoing')
+
+        if bs_ongoing is not None:
+            i = len(bs_ongoing.find_all('alarm'))
+
     except FileNotFoundError:
         pass
 
@@ -795,43 +892,47 @@ def render_content_bottom(tab, n_intervals, server):
         nc_alarms_list = []
         i = 0
         try:
-            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname + '.' + server_port))
-            alarms_server_root = alarms_server.getroot()
+            with open(f'log/{type_connection}/alarms.xml', 'r', encoding='utf-8') as fp:
+                content = fp.read()
+                bs_alarms = BS(content, 'lxml-xml')
+
+            bs_ongoing = bs_alarms.find('ongoing')
 
             # display all the ongoing alarms
             nc_alarms_inside = []
 
-            for alarm in alarms_server_root.findall("./ongoing/alarm"):
-                i = i + 1
-                alarm_station = alarm.attrib['station']
-                alarm_state = alarm.attrib['state']
-                alarm_detail = alarm.attrib['detail']
-                alarm_id = alarm.attrib['id']
+            if bs_ongoing is not None:
+                for alarm in bs_ongoing.find_all('alarm'):
+                    i = i + 1
+                    alarm_station = alarm.get('station')
+                    alarm_state = alarm.get('state')
+                    alarm_detail = alarm.get('detail')
+                    alarm_id = alarm.get('id')
 
-                alarm_problem = int(alarm.attrib['problem'])
-                if alarm_problem == 1:
-                    text_badge = "Warning"
-                    color = "warning"
-                else:
-                    text_badge = "Critic"
-                    color = "danger"
+                    alarm_problem = int(alarm.get('problem'))
+                    if alarm_problem == 1:
+                        text_badge = "Warning"
+                        color = "warning"
+                    else:
+                        text_badge = "Critic"
+                        color = "danger"
 
-                alarm_dt = alarm.attrib['datetime']
-                alarm_datetime = alarm_dt[1:5] + '-' + alarm_dt[5:7] + '-' + \
-                                 alarm_dt[7:9] + ' ' + alarm_dt[10:12] + ':' + \
-                                 alarm_dt[12:14] + ':' + alarm_dt[14:]
+                    alarm_dt = alarm.get('datetime')
+                    alarm_datetime = alarm_dt[1:5] + '-' + alarm_dt[5:7] + '-' + \
+                                     alarm_dt[7:9] + ' ' + alarm_dt[10:12] + ':' + \
+                                     alarm_dt[12:14] + ':' + alarm_dt[14:]
 
-                nc_alarms_inside.append(html.Tr([html.Td(alarm_datetime),
-                                                 html.Td(alarm_station),
-                                                 html.Td(alarm_state),
-                                                 html.Td(alarm_detail),
-                                                 html.Td(dbc.Badge(text_badge, color=color, className="mr-1")),
-                                                 html.Td([dbc.Button('Complete Alarm?',
-                                                                     id={'type': 'btn-alarm',
-                                                                         'id_alarm': alarm_id},
-                                                                     className="mr-1", n_clicks=0)
-                                                          ]),
-                                                 ]))
+                    nc_alarms_inside.append(html.Tr([html.Td(alarm_datetime),
+                                                     html.Td(alarm_station),
+                                                     html.Td(alarm_state),
+                                                     html.Td(alarm_detail),
+                                                     html.Td(dbc.Badge(text_badge, color=color, className="mr-1")),
+                                                     html.Td([dbc.Button('Complete Alarm?',
+                                                                         id={'type': 'btn-alarm',
+                                                                             'id_alarm': alarm_id},
+                                                                         className="mr-1", n_clicks=0)
+                                                              ]),
+                                                     ]))
 
             table_body = [html.Tbody(nc_alarms_inside)]
 
@@ -850,34 +951,40 @@ def render_content_bottom(tab, n_intervals, server):
     elif tab == 'alarms_completed':
         c_alarms_list = []
         try:
-            alarms_server = ET.parse('log/server/{}_alarms.xml'.format(server_hostname + '.' + server_port))
-            alarms_server_root = alarms_server.getroot()
 
+            with open(f'log/{type_connection}/alarms.xml', 'r', encoding='utf-8') as fp:
+                content = fp.read()
+                bs_alarms = BS(content, 'lxml-xml')
+                print(bs_alarms)
+
+            bs_completed = bs_alarms.find('completed')
+            print(bs_completed)
             # display all the ongoing alarms
             c_alarms_inside = []
-            for alarm in alarms_server_root.findall("./completed/alarm"):
-                alarm_station = alarm.attrib['station']
-                alarm_state = alarm.attrib['state']
-                alarm_detail = alarm.attrib['detail']
+            if bs_completed is not None:
+                for alarm in bs_completed.find_all('alarm'):
+                    alarm_station = alarm.get('station')
+                    alarm_state = alarm.get('state')
+                    alarm_detail = alarm.get('detail')
 
-                alarm_problem = int(alarm.attrib['problem'])
-                if alarm_problem == 1:
-                    text_badge = "Warning"
-                    color = "warning"
-                else:
-                    text_badge = "Critic"
-                    color = "danger"
+                    alarm_problem = int(alarm.get('problem'))
+                    if alarm_problem == 1:
+                        text_badge = "Warning"
+                        color = "warning"
+                    else:
+                        text_badge = "Critic"
+                        color = "danger"
 
-                alarm_dt = alarm.attrib['datetime']
-                alarm_datetime = alarm_dt[1:5] + '-' + alarm_dt[5:7] + '-' + \
-                                 alarm_dt[7:9] + ' ' + alarm_dt[10:12] + ':' + \
-                                 alarm_dt[12:14] + ':' + alarm_dt[14:]
+                    alarm_dt = alarm.get('datetime')
+                    alarm_datetime = alarm_dt[1:5] + '-' + alarm_dt[5:7] + '-' + \
+                                     alarm_dt[7:9] + ' ' + alarm_dt[10:12] + ':' + \
+                                     alarm_dt[12:14] + ':' + alarm_dt[14:]
 
-                c_alarms_inside.append(html.Tr([html.Td(alarm_datetime),
-                                                html.Td(alarm_station),
-                                                html.Td(alarm_state),
-                                                html.Td(alarm_detail),
-                                                html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))]))
+                    c_alarms_inside.append(html.Tr([html.Td(alarm_datetime),
+                                                    html.Td(alarm_station),
+                                                    html.Td(alarm_state),
+                                                    html.Td(alarm_detail),
+                                                    html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))]))
 
             table_body = [html.Tbody(c_alarms_inside)]
 

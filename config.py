@@ -43,7 +43,10 @@ BUFFER_DIR: str = 'data'
 
 # HAT ORACLE CLIENT
 CLIENT_ORACLE: str = r'C:\Oracle\instantclient_11_2'
-HOST_ORACLE: str = '192.168.1.78'
+HOST_ORACLE: str = '192.168.1.76'
 PORT_ORACLE: str = '1521'
 USER_ORACLE: str = 'hat'
 PWD_ORACLE: str = 'hat'
+
+# SEISMIC CONFIG
+XML_INVENTORY: str = ""

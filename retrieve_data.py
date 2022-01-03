@@ -5,7 +5,7 @@
 
 import argparse
 import time
-import xml.etree.ElementTree as ET
+from utils import get_network_list
 from threading import Thread
 
 from obspy.clients.seedlink.client.seedlinkconnection import SeedLinkConnection
@@ -17,50 +17,26 @@ from config import *
 
 
 class EasySLC(EasySeedLinkClient):
-    def __init__(self, server_url, network_list, network_list_values):
+    def __init__(self, server_url, network_list, network_list_values,
+                 data_retrieval=False, begin_time=None, end_time=None):
         self.network_list_values = network_list_values
         try:
-            super(EasySLC, self).__init__(server_url)
+            super(EasySLC, self).__init__(server_url, autoconnect=True)
             self.conn.timeout = 30
+            self.data_retrieval = data_retrieval
+            self.begin_time = begin_time
+            self.end_time = end_time
+            self.connected = 0
+
+            self.connected = get_network_list('server', network_list, network_list_values,
+                                              server_hostname=self.server_hostname, server_port=self.server_port)
+
+            print(network_list_values)
+
+            self.streams = []
+
         except SeedLinkException:
             pass
-
-        self.connected = 0
-
-        try:
-            config_server = ET.parse('config/server/{}.xml'.format(self.server_hostname + '.' + str(self.server_port)))
-            config_server_root = config_server.getroot()
-
-            for network in config_server_root:
-                network_name = network.attrib['name']
-
-                for station in config_server_root.findall("./network[@name='{0}']/station".format(network_name)):
-                    station_name = station.attrib['name']
-
-                    for channel in config_server_root.findall("./network[@name='{0}']/"
-                                                              "station[@name='{1}']/"
-                                                              "channel".format(network_name, station_name)):
-                        if channel.attrib['location'] == '':
-                            channel_name = channel.attrib['name']
-                        else:
-                            location_name = channel.attrib['location']
-                            channel_name = channel.attrib['name']
-
-                            channel_name = location_name + '.' + channel_name
-
-                        full_name = network_name + '.' + station_name + '.' + channel_name
-                        network_list_values.append(full_name)
-                        network_list.append({'label': full_name, 'value': full_name})
-            self.connected = 1
-
-        except FileNotFoundError:
-            print('Config file of server missing.')
-            self.connected = -1
-        except IndexError:
-            print('Verify the config file, no station found')
-            self.connected = -2
-
-        self.streams = []
 
     def on_data(self, tr):
         print(tr)
@@ -87,59 +63,109 @@ class EasySLC(EasySeedLinkClient):
 
     def run(self):
         streams = []
-        while True:
-            try:
-                with open(BUFFER_DIR+'/streams.data', 'r') as file:
-                    new_streams = file.read().splitlines()
-                    if streams != new_streams:
-                        self.on_terminate()
-                        for station in new_streams[1:]:
-                            full_sta_name = station.split('.')
-                            if len(full_sta_name) == 3:
-                                net = full_sta_name[0]
-                                sta = full_sta_name[1]
-                                cha = full_sta_name[2]
-                            else:
+        if self.data_retrieval is False:
+            while True:
+                try:
+                    with open(BUFFER_DIR+'/streams.data', 'r') as file:
+                        new_streams = file.read().splitlines()
+                        if streams != new_streams:
+                            self.on_terminate()
+                            for station in new_streams[1:]:
+                                full_sta_name = station.split('.')
                                 net = full_sta_name[0]
                                 sta = full_sta_name[1]
                                 cha = full_sta_name[2] + full_sta_name[3]
-                            self.select_stream(net, sta, cha)
-                        streams = new_streams.copy()
+                                self.select_stream(net, sta, cha)
+
+                            streams = new_streams.copy()
+                except FileNotFoundError:
+                    print('WAITING FOR STREAM FILE OF MONA-LISA')
+                    time.sleep(5)
+                    if self.data_retrieval:
+                        self.on_terminate()
+                        break
+                else:
+                    if self.data_retrieval:
+                        self.on_terminate()
+                        break
+                    data = self.conn.collect()
+
+                    if data == SLPacket.SLTERMINATE:
+                        self.on_terminate()
+                        break
+                    elif data == SLPacket.SLERROR:
+                        self.on_seedlink_error()
+                        continue
+
+                    # At this point the received data should be a SeedLink packet
+                    # XXX In SLClient there is a check for data == None, but I think
+                    #     there is no way that self.conn.collect() can ever return None
+                    assert(isinstance(data, SLPacket))
+
+                    packet_type = data.get_type()
+
+                    # Ignore in-stream INFO packets (not supported)
+                    if packet_type not in (SLPacket.TYPE_SLINF, SLPacket.TYPE_SLINFT):
+                        # The packet should be a data packet
+                        trace = data.get_trace()
+                        # Pass the trace to the on_data callback
+                        self.on_data(trace)
+        elif self.begin_time is not None and self.end_time is not None:
+            try:
+                with open(BUFFER_DIR + '/streams.data', 'r') as file:
+                    new_streams = file.read().splitlines()
+                    self.on_terminate()
+                    for station in new_streams[1:]:
+                        full_sta_name = station.split('.')
+                        net = full_sta_name[0]
+                        sta = full_sta_name[1]
+                        cha = full_sta_name[2] + full_sta_name[3]
+                        self.select_stream(net, sta, cha)
+
             except FileNotFoundError:
                 print('WAITING FOR STREAM FILE OF MONA-LISA')
                 time.sleep(5)
             else:
+                self.conn.set_begin_time(self.begin_time)
+                self.conn.set_end_time(self.end_time)
                 data = self.conn.collect()
+                while data is not None:
+                    if data == SLPacket.SLTERMINATE:
+                        self.on_terminate()
+                        break
 
-                if data == SLPacket.SLTERMINATE:
-                    self.on_terminate()
-                    break
-                elif data == SLPacket.SLERROR:
-                    self.on_seedlink_error()
-                    continue
+                    elif data == SLPacket.SLERROR:
+                        self.on_seedlink_error()
+                        continue
+                    else:
 
-                # At this point the received data should be a SeedLink packet
-                # XXX In SLClient there is a check for data == None, but I think
-                #     there is no way that self.conn.collect() can ever return None
-                assert(isinstance(data, SLPacket))
+                    # At this point the received data should be a SeedLink packet
+                    # XXX In SLClient there is a check for data == None, but I think
+                    #     there is no way that self.conn.collect() can ever return None
+                        assert (isinstance(data, SLPacket))
 
-                packet_type = data.get_type()
+                        packet_type = data.get_type()
 
-                # Ignore in-stream INFO packets (not supported)
-                if packet_type not in (SLPacket.TYPE_SLINF, SLPacket.TYPE_SLINFT):
-                    # The packet should be a data packet
-                    trace = data.get_trace()
-                    # Pass the trace to the on_data callback
-                    self.on_data(trace)
+                        # Ignore in-stream INFO packets (not supported)
+                        if packet_type not in (SLPacket.TYPE_SLINF, SLPacket.TYPE_SLINFT):
+                            # The packet should be a data packet
+                            trace = data.get_trace()
+                            # Pass the trace to the on_data callback
+                            self.on_data(trace)
+                        data = self.conn.collect()
 
+
+    # ADAPT
     def on_terminate(self):
         self._EasySeedLinkClient__streaming_started = False
         self.close()
+
         del self.conn
         self.conn = SeedLinkConnection(timeout=30)
         self.conn.set_sl_address('%s:%d' %
                                  (self.server_hostname, self.server_port))
-        self.connect()
+        if self.data_retrieval is False:
+            self.connect()
 
         # self.conn.begin_time = UTCDateTime()
 
@@ -148,11 +174,12 @@ class EasySLC(EasySeedLinkClient):
         self.close()
         self.streams = self.conn.streams.copy()
         del self.conn
-        self.conn = SeedLinkConnection(timeout=30)
-        self.conn.set_sl_address('%s:%d' %
-                                 (self.server_hostname, self.server_port))
-        self.conn.streams = self.streams.copy()
-        self.run()
+        if self.data_retrieval is False:
+            self.conn = SeedLinkConnection(timeout=30)
+            self.conn.set_sl_address('%s:%d' %
+                                     (self.server_hostname, self.server_port))
+            self.conn.streams = self.streams.copy()
+            self.run()
 
 
 class SLThread(Thread):
@@ -202,7 +229,8 @@ if __name__ == '__main__':
     network_list = []
     network_list_values = []
 
-    client = EasySLC(args.server + ':' + args.port, network_list, network_list_values)
+    client = EasySLC(args.server + ':' + args.port, network_list, network_list_values, data_retrieval=True,
+                     begin_time='2021,11,19,4,0,0', end_time='2021,11,19,4,0,30')
 
     print('Network list:', network_list_values)
 
