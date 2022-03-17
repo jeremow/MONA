@@ -13,6 +13,8 @@ from obspy.clients.seedlink.easyseedlink import EasySeedLinkClient
 from obspy.clients.seedlink.seedlinkexception import SeedLinkException
 from obspy.clients.seedlink.slpacket import SLPacket
 
+from obspy import read_inventory
+
 from config import *
 
 
@@ -41,8 +43,13 @@ class EasySLC(EasySeedLinkClient):
     def on_data(self, tr):
         print(tr)
         if tr is not None:
+
+            tr.resample(sampling_rate=SAMPLING_RATE)
+            tr.detrend(type='constant')
+            
+            
             if tr.stats.location == '':
-                station = tr.stats.network + '.' + tr.stats.station + '.' + tr.stats.channel
+                station = tr.stats.network + '.' + tr.stats.station + '..' + tr.stats.channel
             else:
                 station = tr.stats.network + '.' + tr.stats.station + '.' + tr.stats.location + '.' + tr.stats.channel
 

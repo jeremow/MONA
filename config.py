@@ -37,16 +37,24 @@ UPDATE_TIME_ALARMS: int = 60000  # in ms
 # STYLE
 COLOR_TIME_GRAPH: str = "#ffe476"
 TIME_DELTA: pd.Timedelta = pd.Timedelta(60, unit='sec')
+HEIGHT_GRAPH: int = 250
+TOP_GRAPH: int = 30
+BOTTOM_GRAPH: int = 10
+LEFT_GRAPH: int = 10
+RIGHT_GRAPH: int = 10
 
 # DATA BUFFER
 BUFFER_DIR: str = 'data'
 
 # HAT ORACLE CLIENT
 CLIENT_ORACLE: str = r'C:\Oracle\instantclient_11_2'
-HOST_ORACLE: str = '192.168.1.76'
+HOST_ORACLE: str = '192.168.1.78'
 PORT_ORACLE: str = '1521'
 USER_ORACLE: str = 'hat'
 PWD_ORACLE: str = 'hat'
 
 # SEISMIC CONFIG
 XML_INVENTORY: str = ""
+
+# DATA PROCESSING
+SAMPLING_RATE: float = 25.0

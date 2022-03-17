@@ -695,7 +695,9 @@ def render_figures_top(tab, sta_list, n_intervals):
 
                     fig.update_layout(template='plotly_dark', title=station,
                                       xaxis={'range': range_x},
-                                      yaxis={'autorange': True})
+                                      yaxis={'autorange': True},
+                                      height=HEIGHT_GRAPH,
+                                      margin=dict(l=LEFT_GRAPH, r=RIGHT_GRAPH, b=BOTTOM_GRAPH, t=TOP_GRAPH, pad=4))
 
                     fig_list.append(fig)
                     time_graphs_names.append(station)
