@@ -2,6 +2,8 @@
 # SERVER
 import pandas as pd
 
+VERBOSE: int = 2
+
 SERVER_DASH_IP: str = "127.0.0.1"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"

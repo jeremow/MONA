@@ -13,8 +13,10 @@
 # - state_health.py for the Oracle Client of the HAT database of the IAG
 
 import base64
+import gc
 import glob
 import os
+import psutil
 import webbrowser
 import logging as log
 import time
@@ -654,6 +656,15 @@ def create_alert(nb_alarms, old_nb_alarms, n_clicks):
               # Input('Trace', 'fig'),
               prevent_initial_call=True)
 def render_figures_top(tab, sta_list, n_intervals):
+
+    if VERBOSE == 2:
+        pid = os.getpid()
+        python_process = psutil.Process(pid)
+        memory_use = python_process.memory_info()[0]/2.**30
+        print('memory use:', round(memory_use,3))
+
+    gc.collect()
+
     if tab == 'server':
         global client
         global time_graphs_names
@@ -721,6 +732,7 @@ def render_figures_top(tab, sta_list, n_intervals):
                     date_x = data_sta['Date'].values
                     data_sta_y = data_sta['Data_Sta'].values
 
+                    fig_list[i].data = []
                     fig_list[i].add_trace(go.Scattergl(x=date_x, y=data_sta_y, mode='lines', showlegend=False,
                                                        line=dict(color=COLOR_TIME_GRAPH),
                                                        hovertemplate='<b>Date:</b> %{x}<br>' +

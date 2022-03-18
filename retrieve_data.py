@@ -57,7 +57,7 @@ class EasySLC(EasySeedLinkClient):
             new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
             try:
                 data_sta = pd.read_feather(BUFFER_DIR + '/' + station + '.data')
-                if len(data_sta) <= 30000:
+                if len(data_sta) <= 4500:
                     data_sta = pd.concat([data_sta, new_data_sta])
                 else:
                     data_sta = pd.concat([data_sta[round(-len(data_sta) / 2):], new_data_sta])
