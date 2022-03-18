@@ -2,7 +2,7 @@
 # SERVER
 import pandas as pd
 
-VERBOSE: int = 2
+VERBOSE: int = 0
 
 SERVER_DASH_IP: str = "127.0.0.1"
 SERVER_DASH_PORT: int = 8050
