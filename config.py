@@ -49,11 +49,13 @@ RIGHT_GRAPH: int = 10
 BUFFER_DIR: str = 'data'
 
 # HAT ORACLE CLIENT
-CLIENT_ORACLE: str = r'C:\Oracle\instantclient_11_2'
-HOST_ORACLE: str = '192.168.1.78'
-PORT_ORACLE: str = '1521'
-USER_ORACLE: str = 'hat'
-PWD_ORACLE: str = 'hat'
+CLIENT_ORACLE: str = r'C:\app\instantclient_11_2'
+HOST_ORACLE: str = '192.168.1.76'
+PORT_ORACLE: str = '1522'
+SERVICE_ORACLE: str = 'hatdb2'
+USER_ORACLE: str = r'hat'
+PWD_ORACLE: str = 'mndc_iag'
+TABLE_ORACLE: str = 'hatv4'
 
 # SEISMIC CONFIG
 XML_INVENTORY: str = ""

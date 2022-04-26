@@ -2,6 +2,7 @@ import cx_Oracle
 from config import *
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
+from utils import format_date_to_str
 
 
 class HatOracleClient:
@@ -13,8 +14,8 @@ class HatOracleClient:
     """
     def __init__(self):
         cx_Oracle.init_oracle_client(CLIENT_ORACLE)
-        self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE, PORT_ORACLE, service_name='xe')
-        self.conn = cx_Oracle.connect(user=r'hat', password='hat', dsn=self.dsn_tns)
+        self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE, PORT_ORACLE, service_name=SERVICE_ORACLE)
+        self.conn = cx_Oracle.connect(user=USER_ORACLE, password=PWD_ORACLE, dsn=self.dsn_tns)
         self.cursor = self.conn.cursor()
         self.problem = []
 
@@ -30,58 +31,69 @@ class HatOracleClient:
             stations = []
             states_data = f"<server ip='{HOST_ORACLE}' port='{PORT_ORACLE}'>"
 
-            self.cursor.execute('SELECT STA, MAX(DATE1) FROM ALARMLOG GROUP BY STA')
+            self.cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE} GROUP BY STATION_NAME')
             for row in self.cursor:
-                stations.append([row[0], row[1]])
+                stations.append(row[0])
 
-            for sta, timestamp in stations:
+            for sta in stations:
                 states_data += f"<station name='{sta}'>"
-                self.cursor.execute('SELECT * FROM ALARMLOG WHERE STA=:sta AND DATE1=:timestamp',
-                                    sta=sta, timestamp=timestamp)
-                row = self.cursor
+                self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE} WHERE STATION_NAME=:sta ORDER BY TIME DESC',
+                                    sta=sta)
+                for row in self.cursor:
 
-                # HOW TO ADD A NEW PARAMETER FROM THE DATABASE OF HEALTH STATES
-                # 1: Search the row in your database and add a line below with the name of it
-                # 2: in the self.verify_states method, add the line in between the parenthesis "param=param".
-                #    Don't forget the comma at the end of the already written last parameter
-                # 3: Add a line in the variable states_data with the formatted name of your parameter "Your Param".
-                #    The name of the variable written by you with its unit {param}Unit and you add one to the number
-                #    inside of the self.problem[i+1] attribute. Format:
-                #    <state name='Your Param' datetime='{dt}' value='{param}Unit' problem='{self.problem[i+1]}'/>
-                #    Example:
-                #    <state name='Current' datetime='{dt}' value='{current}A' problem='{self.problem[5]}'/>
-                # 4: In the method verify_states, you add the line: param = parameters.pop('param', 'None')
-                # 5: You add the criteria afterwards like the model in the verify_states method.
+                    # HOW TO ADD A NEW PARAMETER FROM THE DATABASE OF HEALTH STATES
+                    # 1: Search the row in your database and add a line below with the name of it
+                    # 2: in the self.verify_states method, add the line in between the parenthesis "param=param".
+                    #    Don't forget the comma at the end of the already written last parameter
+                    # 3: Add a line in the variable states_data with the formatted name of your parameter "Your Param".
+                    #    The name of the variable written by you with its unit {param}Unit and you add one to the number
+                    #    inside of the self.problem[i+1] attribute. Format:
+                    #    <state name='Your Param' datetime='{dt}' value='{param}Unit' problem='{self.problem[i+1]}'/>
+                    #    Example:
+                    #    <state name='Current' datetime='{dt}' value='{current}A' problem='{self.problem[5]}'/>
+                    # 4: In the method verify_states, you add the line: param = parameters.pop('param', 'None')
+                    # 5: You add the criteria afterwards like the model in the verify_states method.
 
-                humidity = row[2]
-                temp = row[3]
-                alarm_loop = row[16]
-                alarm_door = row[17]
-                battery_voltage = row[29]
+                    timestamp = row[0]
+                    print(f'Last state data: {sta} - {timestamp}')
+                    humidity = row[4]
+                    temp = row[8]
+                    # alarm_loop = row[16]
+                    # alarm_door = row[17]
+                    battery_voltage = row[9]
 
-                self.verify_states(humidity=humidity,
-                                   temp=temp,
-                                   alarm_loop=alarm_loop,
-                                   alarm_door=alarm_door,
-                                   battery_voltage=battery_voltage)
+                    self.verify_states(humidity=humidity,
+                                       temp=temp,
+                                       # alarm_loop=alarm_loop,
+                                       # alarm_door=alarm_door,
+                                       battery_voltage=battery_voltage)
 
-                dt = f"D{timestamp.year}{timestamp.month}{timestamp.day}" \
-                     f"T{timestamp.hour}{timestamp.minute}{timestamp.second}"
-                states_data += f"""
-                <state name='Humidity' datetime='{dt}' value='{humidity}%' problem='{self.problem[0]}'/> 
-                <state name='Temperature' datetime='{dt}' value='{temp}°C' problem='{self.problem[1]}'/> 
-                <state name='Solar Panel' datetime='{dt}' value='{alarm_loop}' problem='{self.problem[2]}'/> 
-                <state name='Intrusion' datetime='{dt}' value='{alarm_door}' problem='{self.problem[3]}'/> 
-                <state name='Battery Voltage' datetime='{dt}' value='{battery_voltage}V' problem='{self.problem[4]}'/> 
-                """
+                    dt = f"D{format_date_to_str(timestamp.year, 4)}{format_date_to_str(timestamp.month, 2)}" \
+                         f"{format_date_to_str(timestamp.day,2)}" \
+                         f"T{format_date_to_str(timestamp.hour, 2)}{format_date_to_str(timestamp.minute, 2)}" \
+                         f"{format_date_to_str(timestamp.second, 2)}"
+                    states_data += f"""
+                    <state name='Humidity' datetime='{dt}' value='{humidity}%' problem='{self.problem[0]}'/> 
+                    <state name='Temperature' datetime='{dt}' value='{temp}°C' problem='{self.problem[1]}'/> 
+                    <state name='Battery Voltage' datetime='{dt}' value='{battery_voltage}V' problem='{self.problem[2]}'/> 
+                    """
 
-                states_data += f"</station>"
+                    # f"""
+                    #                 <state name='Humidity' datetime='{dt}' value='{humidity}%' problem='{self.problem[0]}'/>
+                    #                 <state name='Temperature' datetime='{dt}' value='{temp}°C' problem='{self.problem[1]}'/>
+                    #                 <state name='Solar Panel' datetime='{dt}' value='{alarm_loop}' problem='{self.problem[2]}'/>
+                    #                 <state name='Intrusion' datetime='{dt}' value='{alarm_door}' problem='{self.problem[3]}'/>
+                    #                 <state name='Battery Voltage' datetime='{dt}' value='{battery_voltage}V' problem='{self.problem[4]}'/>
+                    #                 """
+
+                    states_data += f"</station>"
+                    break  # to leave the current cursor after getting the last value
 
             states_data += f"</server>"
 
             soup = BeautifulSoup(states_data, 'lxml-xml')
 
-            with open('log/server/states.xml', 'w') as fp:
+            with open('log/server/states.xml', 'w', encoding='utf-8') as fp:
                 fp.write(soup.prettify())
 
         except cx_Oracle.DatabaseError:
@@ -93,8 +105,8 @@ class HatOracleClient:
 
         humidity = parameters.pop('humidity', 'None')
         temp = parameters.pop('temp', 'None')
-        alarm_loop = parameters.pop('alarm_loop', 'None')
-        alarm_door = parameters.pop('alarm_door', 'None')
+        # alarm_loop = parameters.pop('alarm_loop', 'None')
+        # alarm_door = parameters.pop('alarm_door', 'None')
         battery_voltage = parameters.pop('battery_voltage', 'None')
         # add here your new parameters
         # current = parameters.pop('current', 'None') ...
@@ -120,19 +132,19 @@ class HatOracleClient:
         else:
             self.problem.append(0)
 
-        if alarm_loop is None:
-            self.problem.append(-1)
-        elif alarm_loop < 0 or alarm_loop > 0.9:
-            self.problem.append(2)
-        else:
-            self.problem.append(0)
-
-        if alarm_door is None:
-            self.problem.append(-1)
-        elif alarm_door < 0 or alarm_door > 0.9:
-            self.problem.append(2)
-        else:
-            self.problem.append(0)
+        # if alarm_loop is None:
+        #     self.problem.append(-1)
+        # elif alarm_loop < 0 or alarm_loop > 0.9:
+        #     self.problem.append(2)
+        # else:
+        #     self.problem.append(0)
+        #
+        # if alarm_door is None:
+        #     self.problem.append(-1)
+        # elif alarm_door < 0 or alarm_door > 0.9:
+        #     self.problem.append(2)
+        # else:
+        #     self.problem.append(0)
 
         if battery_voltage is None:
             self.problem.append(-1)
@@ -154,4 +166,5 @@ class HatOracleClient:
         #     self.problem.append(0)
 
     def close(self):
+        self.cursor.close()
         self.conn.close()

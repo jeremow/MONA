@@ -14,13 +14,10 @@
 
 import base64
 import gc
-import glob
 import os
-# import psutil
+import psutil
 import webbrowser
 import logging as log
-import time
-from threading import ThreadError
 
 import dash
 from dash.dependencies import Input, Output, State, MATCH
@@ -30,10 +27,7 @@ from dash import html
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 
-# obspy
 from obspy import read
-
-# pandas
 import pandas as pd
 
 # style and config
@@ -53,10 +47,12 @@ import simpleaudio as sa
 from simpleaudio._simpleaudio import SimpleaudioError
 from alarms import create_alarm_from_HAT
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data")
 
-app.css.config.serve_locally = True
-app.scripts.config.serve_locally = True
+app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data",
+                external_stylesheets=[dbc.themes.CYBORG])
+
+# app.css.config.serve_locally = True
+# app.scripts.config.serve_locally = True
 
 app.title = 'MONA-LISA'
 server = app.server
@@ -64,7 +60,8 @@ server = app.server
 # problems between some callbacks.
 
 try:
-    del time_graphs_names, time_graphs, fig_list, network_list, network_list_values, interval_time_graphs, client
+    del time_graphs_names, time_graphs, fig_list, network_list, network_list_values, interval_time_graphs, client, \
+        client_oracle
 except NameError:
     pass
 
@@ -76,6 +73,7 @@ network_list_values = []
 interval_time_graphs = []
 client = None
 client_thread = None
+client_oracle = HatOracleClient()
 
 # Remove all the data residual files if they exist
 delete_residual_data()
@@ -511,12 +509,14 @@ def update_list_station(n_clicks):
     """
     station_hat_list = []
     try:
-        config_hat_server = ET.parse('log/server/states.xml')
-        config_hat_server_root = config_hat_server.getroot()
 
-        for station in config_hat_server_root.findall("./station"):
-            station_name = station.attrib['name']
+        with open(f'log/server/states.xml', 'r', encoding='utf-8') as fp:
+            content = fp.read()
+            bs_states = BS(content, 'lxml-xml')
+        for bs_station in bs_states.find_all('station'):
+            station_name = bs_station.get('name')
             station_hat_list.append({'label': station_name, 'value': station_name})
+
     except FileNotFoundError:
         print('No file for Health States found. Please verify log/server/states.xml')
     return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
@@ -537,12 +537,10 @@ def update_states(station_name, n_intervals, tab):
     """
     states = []
     states_list = []
+    global client_oracle
 
     try:
-        state_server = HatOracleClient()
-        state_server.write_state_health()
-        state_server.close()
-        del state_server
+        client_oracle.write_state_health()
     except cx_Oracle.ProgrammingError:
         print('Connection error for HatOracleClient')
     except cx_Oracle.DatabaseError:
@@ -969,10 +967,8 @@ def update_alarms(tab, n_intervals, type_connection):
             with open(f'log/{type_connection}/alarms.xml', 'r', encoding='utf-8') as fp:
                 content = fp.read()
                 bs_alarms = BS(content, 'lxml-xml')
-                print(bs_alarms)
 
             bs_completed = bs_alarms.find('completed')
-            print(bs_completed)
             # display all the ongoing alarms
             c_alarms_inside = []
             if bs_completed is not None:
@@ -1140,3 +1136,6 @@ if __name__ == '__main__':
         del client
     else:
         del client
+
+    client_oracle.close()
+    del client_oracle
