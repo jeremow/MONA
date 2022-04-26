@@ -2,7 +2,7 @@
 # SIDEBAR TOP TO CONNECT TO SERVER, FOLDER, IMPORT A FILE
 
 from obspy import UTCDateTime
-from obspy.clients.seedlink import Client
+from obspy.clients.seedlink.basic_client import Client
 from obspy.clients.seedlink.seedlinkexception import SeedLinkException
 
 import xml.etree.ElementTree as ET
@@ -46,7 +46,8 @@ def create_client(server_info):
         return client, ip_address, port
 
 
-def connection_client(client, ip_address, port, network_list):
+def connection_client(client, ip_address, port, network_list, network_list_values):
+
     try:
         config_server = ET.parse('config/server/{}.xml'.format(ip_address + '.' + port))
         config_server_root = config_server.getroot()
@@ -63,9 +64,13 @@ def connection_client(client, ip_address, port, network_list):
                     if channel.attrib['location'] == '':
                         channel_name = channel.attrib['name']
                     else:
-                        channel_name = channel.attrib['location'] + '.' + channel.attrib['name']
+                        location_name = channel.attrib['location']
+                        channel_name = channel.attrib['name']
+
+                        channel_name = location_name + '.' + channel_name
 
                     full_name = network_name + '.' + station_name + '.' + channel_name
+                    network_list_values.append(full_name)
                     network_list.append({'label': full_name, 'value': full_name})
         return 1
 

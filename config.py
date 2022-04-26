@@ -2,20 +2,22 @@
 # SERVER
 import pandas as pd
 
+VERBOSE: int = 0
+
 SERVER_DASH_IP: str = "127.0.0.1"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"
 DEBUG: bool = True
 
 # AREA AND STATIONS
-NAME_AREA: str = "Mongolia"
-LAT_MAP: int = 47
-LON_MAP: int = 104
-ZOOM_MAP: float = 4.5
+NAME_AREA: str = "UB (France)"
+LAT_MAP: int = 48
+LON_MAP: int = 107
+ZOOM_MAP: float = 7
 
-LIST_NAME_STA: list = ['SB1M', 'SB2M', 'SB3M', 'SB4M', 'SB5M']
-LIST_LAT_STA: list = ['47.8630', '47.9630', '47.6630', '47.5630', '47.9830']
-LIST_LON_STA: list = ['106.4039', '107.4039', '108.4039', '109.4039', '110.4039']
+LIST_NAME_STA: list = ['SEMM', 'ARTM', 'UGDM', 'ALFM']
+LIST_LAT_STA: list = ['47.561488', '47.926953', '47.638031', '48.00351']
+LIST_LON_STA: list = ['106.977964', '107.270435', '107.400533', '106.771986']
 
 
 # GRAFANA LINK
@@ -29,13 +31,34 @@ GRAFANA_LINK: str = GRAFANA_DOMAIN + GRAFANA_DASHBOARD + '&refresh=' + \
                GRAFANA_REFRESH + '&from=' + GRAFANA_T_FROM + '&to=' + GRAFANA_T_TO
 
 # UPDATE VAR
-UPDATE_TIME_GRAPH: int = 30000  # in ms
-UPDATE_TIME_STATES: int = 30000  # in ms
-UPDATE_TIME_ALARMS: int = 30000  # in ms
+UPDATE_TIME_GRAPH: int = 15000  # in ms
+UPDATE_DATA: int = 30000
+UPDATE_TIME_STATES: int = 100000  # in ms
+UPDATE_TIME_ALARMS: int = 60000  # in ms
 
 # STYLE
 COLOR_TIME_GRAPH: str = "#ffe476"
 TIME_DELTA: pd.Timedelta = pd.Timedelta(60, unit='sec')
+HEIGHT_GRAPH: int = 250
+TOP_GRAPH: int = 30
+BOTTOM_GRAPH: int = 10
+LEFT_GRAPH: int = 10
+RIGHT_GRAPH: int = 10
 
 # DATA BUFFER
 BUFFER_DIR: str = 'data'
+
+# HAT ORACLE CLIENT
+CLIENT_ORACLE: str = r'C:\app\instantclient_11_2'
+HOST_ORACLE: str = '192.168.1.76'
+PORT_ORACLE: str = '1522'
+SERVICE_ORACLE: str = 'hatdb2'
+USER_ORACLE: str = r'hat'
+PWD_ORACLE: str = 'mndc_iag'
+TABLE_ORACLE: str = 'hatv4'
+
+# SEISMIC CONFIG
+XML_INVENTORY: str = ""
+
+# DATA PROCESSING
+SAMPLING_RATE: float = 25.0
