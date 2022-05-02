@@ -46,8 +46,7 @@ class EasySLC(EasySeedLinkClient):
 
             tr.resample(sampling_rate=SAMPLING_RATE)
             tr.detrend(type='constant')
-            
-            
+
             if tr.stats.location == '':
                 station = tr.stats.network + '.' + tr.stats.station + '..' + tr.stats.channel
             else:

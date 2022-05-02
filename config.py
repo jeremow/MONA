@@ -49,13 +49,30 @@ RIGHT_GRAPH: int = 10
 BUFFER_DIR: str = 'data'
 
 # HAT ORACLE CLIENT
-CLIENT_ORACLE: str = r'C:\app\instantclient_11_2'
-HOST_ORACLE: str = '192.168.1.76'
-PORT_ORACLE: str = '1522'
-SERVICE_ORACLE: str = 'hatdb2'
-USER_ORACLE: str = r'hat'
-PWD_ORACLE: str = 'mndc_iag'
-TABLE_ORACLE: str = 'hatv4'
+CLIENT_ORACLE_XAT: str = r'C:\app\instantclient_11_2'
+HOST_ORACLE_XAT: str = '192.168.1.76'
+PORT_ORACLE_XAT: str = '1522'
+SERVICE_ORACLE_XAT: str = 'hatdb2'
+USER_ORACLE_XAT: str = r'hat'
+PWD_ORACLE_XAT: str = 'mndc_iag'
+TABLE_ORACLE_XAT: str = 'hatv4'
+
+# ALARM XAT
+XAT_ALARM_NAME: list = ['Loop', 'Water', 'Door 1', 'Door 2']
+XAT_NORMAL_STATE: dict = {
+    'UB4M': '1100',
+    'TEST': '1000',
+    'CCBM': '1000',
+}
+
+# SOH ORACLE CLIENT
+CLIENT_ORACLE_SOH: str = r'C:\app\instantclient_11_2'
+HOST_ORACLE_SOH: str = '192.168.1.78'
+PORT_ORACLE_SOH: str = '1522'
+SERVICE_ORACLE_SOH: str = 'hatdb2'
+USER_ORACLE_SOH: str = r'sohdata'
+PWD_ORACLE_SOH: str = 'tdb'
+TABLE_ORACLE_SOH: list = ['DISKSIZE', 'MASS_POSITION', 'BATTERYVOLTAGE']
 
 # SEISMIC CONFIG
 XML_INVENTORY: str = ""
