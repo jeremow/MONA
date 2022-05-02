@@ -10,15 +10,5 @@
   <alarm datetime="D20210517T071510" detail="-45°C" id="FDFM.D20210517T071510.1" problem="1" state="Temperature Outside" station="FDFM"/>
   <alarm datetime="D20210517T071510" detail="Yes" id="FDFM.D20210517T071510.2" problem="2" state="Intrusion" station="FDFM"/>
   <alarm datetime="D20210517T071510" detail="-45°C" id="FDFM.D20210517T071510.1" problem="1" state="Temperature Outside" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="-45°C" id="FDFM.D20210517T071510.1" problem="1" state="Temperature Outside" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="-45°C" id="FDFM.D20210517T071510.1" problem="1" state="Temperature Outside" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="-45°C" id="FDFM.D20210517T071510.1" problem="1" state="Temperature Outside" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="Yes" id="FDFM.D20210517T071510.2" problem="2" state="Intrusion" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="Yes" id="FDFM.D20210517T071510.2" problem="2" state="Intrusion" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="Yes" id="FDFM.D20210517T071510.2" problem="2" state="Intrusion" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="-45°C" id="FDFM.D20210517T071510.1" problem="1" state="Temperature Outside" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="Yes" id="FDFM.D20210517T071510.2" problem="2" state="Intrusion" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="-45°C" id="FDFM.D20210517T071510.1" problem="1" state="Temperature Outside" station="FDFM"/>
-  <alarm datetime="D20210517T071510" detail="Yes" id="FDFM.D20210517T071510.2" problem="2" state="Intrusion" station="FDFM"/>
  </completed>
 </alarms>

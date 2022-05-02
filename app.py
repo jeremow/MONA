@@ -45,7 +45,7 @@ from subprocess import Popen
 # for alarms
 import simpleaudio as sa
 from simpleaudio._simpleaudio import SimpleaudioError
-from alarms import create_alarm_from_HAT
+# from alarms import create_alarm_from_HAT
 
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data",
@@ -61,7 +61,7 @@ server = app.server
 
 try:
     del time_graphs_names, time_graphs, fig_list, network_list, network_list_values, interval_time_graphs, client, \
-        client_oracle
+        client_oracle_xat
 except NameError:
     pass
 
@@ -73,7 +73,7 @@ network_list_values = []
 interval_time_graphs = []
 client = None
 client_thread = None
-client_oracle = HatOracleClient()
+client_oracle_xat = HatOracleClient()
 
 # Remove all the data residual files if they exist
 delete_residual_data()
@@ -510,7 +510,7 @@ def update_list_station(n_clicks):
     station_hat_list = []
     try:
 
-        with open(f'log/server/states.xml', 'r', encoding='utf-8') as fp:
+        with open(f'log/server/states_xat.xml', 'r', encoding='utf-8') as fp:
             content = fp.read()
             bs_states = BS(content, 'lxml-xml')
         for bs_station in bs_states.find_all('station'):
@@ -518,7 +518,7 @@ def update_list_station(n_clicks):
             station_hat_list.append({'label': station_name, 'value': station_name})
 
     except FileNotFoundError:
-        print('No file for Health States found. Please verify log/server/states.xml')
+        print('No file for Health States found. Please verify log/server/states_xat.xml')
     return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
                          options=station_hat_list, multi=False, style={'color': 'black'})]
 
@@ -537,18 +537,20 @@ def update_states(station_name, n_intervals, tab):
     """
     states = []
     states_list = []
-    global client_oracle
+    global client_oracle_xat
 
     try:
-        client_oracle.write_state_health()
+        client_oracle_xat.write_state_health()
     except cx_Oracle.ProgrammingError:
         print('Connection error for HatOracleClient')
     except cx_Oracle.DatabaseError:
         print('Connection error for HatOracleClient')
+    except AttributeError:
+        print('Connection not available for new data.')
 
     if station_name is not None:
         try:
-            with open(f'log/{tab}/states.xml', 'r', encoding='utf-8') as fp:
+            with open(f'log/{tab}/states_xat.xml', 'r', encoding='utf-8') as fp:
                 content = fp.read()
                 bs_states = BS(content, 'lxml-xml')
             bs_station = bs_states.find('station', {'name': station_name})
@@ -590,10 +592,10 @@ def update_states(station_name, n_intervals, tab):
                                 striped=True
                                 )
 
-    try:
-        create_alarm_from_HAT(tab)
-    except AttributeError:
-        print('Wrong server to create alarms')
+    # try:
+    #     create_alarm_from_HAT(tab)
+    # except AttributeError:
+    #     print('Wrong server to create alarms')
 
     return html.Div(id='health-states', children=states_list)
 
@@ -812,12 +814,13 @@ def update_data(tab, network_list_active, submit_value):
 
 graph_bottom = html.Div(
     [
-        html.H5("Alarms", className="display-5"),
+        html.H5("State of Health", className="display-5"),
         dbc.Tabs(id="tabs-styled-with-inline",
                  children=[
-                    dbc.Tab(label='Map', tab_id='map'),
-                    dbc.Tab(label='Alarms in progress', tab_id='alarms_in_progress'),
-                    dbc.Tab(label='Alarms completed', tab_id='alarms_completed'),
+                     dbc.Tab(label='Map', tab_id='map'),
+                     dbc.Tab(label='State of Health', tab_id='soh'),
+                     dbc.Tab(label='Alarms in progress', tab_id='alarms_in_progress'),
+                     dbc.Tab(label='Alarms completed', tab_id='alarms_completed'),
                     ],
                  active_tab='alarms_in_progress'),
         html.Div(id='tabs-content-inline')
@@ -867,9 +870,9 @@ def complete_alarm(n_clicks, _id, tab):
               Input('tabs-styled-with-inline', 'active_tab'),
               Input('interval-alarms', 'n_intervals'),
               State('tabs-connection', 'active_tab'),
+              Input('station-list-one-choice', 'value'),
               prevent_initial_call=True)
-def update_alarms(tab, n_intervals, type_connection):
-
+def update_alarms(tab, n_intervals, type_connection, sta):
     # COUNTING THE ALARMS WHATEVER THE TAB
     i = 0
     try:
@@ -900,6 +903,74 @@ def update_alarms(tab, n_intervals, type_connection):
             dcc.Graph(figure=fig, config={'displaylogo': False}),
             html.Div(id='number-alarms', children=i, hidden=True)
         ])
+    elif tab == 'soh':
+        states_xat = []
+        states_xat_table = []
+        states_soh = []
+        states_soh_table = []
+        try:
+            with open(f'log/{type_connection}/states_xat.xml', 'r', encoding='utf-8') as fp:
+                content = fp.read()
+                bs_states_xat = BS(content, 'lxml-xml')
+            bs_station = bs_states_xat.find('station', {'name': sta})
+            if bs_station is not None:
+                for state in bs_station.find_all('state'):
+                    state_dt = state.get('datetime')
+                    state_datetime = state_dt[1:5] + '-' + state_dt[5:7] + '-' + \
+                                     state_dt[7:9] + ' ' + state_dt[10:12] + ':' + \
+                                     state_dt[12:14] + ':' + state_dt[14:]
+                    states_xat_table.append(html.Tr(
+                        [html.Td(state_datetime),
+                         html.Td(state.get('name')),
+                         html.Td(state.get('value'))
+                         ]
+                    ))
+
+                table_body = [html.Tbody(states_xat_table)]
+
+                states_xat = dbc.Table(table_body,
+                                       bordered=True,
+                                       dark=True,
+                                       hover=True,
+                                       responsive=True,
+                                       striped=True
+                                       )
+        except FileNotFoundError:
+            print(f'states_xat.xml file not found in log/{type_connection}')
+
+        try:
+            with open(f'log/{type_connection}/states_soh.xml', 'r', encoding='utf-8') as fp:
+                content = fp.read()
+                bs_states_soh = BS(content, 'lxml-xml')
+            bs_station = bs_states_soh.find('station', {'name': sta})
+            if bs_station is not None:
+                for state in bs_station.find_all('state'):
+                    state_dt = state.get('datetime')
+                    state_datetime = state_dt[1:5] + '-' + state_dt[5:7] + '-' + \
+                                     state_dt[7:9] + ' ' + state_dt[10:12] + ':' + \
+                                     state_dt[12:14] + ':' + state_dt[14:]
+                    states_soh_table.append(html.Tr(
+                        [html.Td(state_datetime),
+                         html.Td(state.get('name')),
+                         html.Td(state.get('value'))
+                         ]
+                    ))
+
+                table_body = [html.Tbody(states_soh_table)]
+
+                states_soh = dbc.Table(table_body,
+                                       bordered=True,
+                                       dark=True,
+                                       hover=True,
+                                       responsive=True,
+                                       striped=True
+                                       )
+        except FileNotFoundError:
+            print(f'states_soh.xml file not found in log/{type_connection}')
+
+        return [html.Div(id='tabs-content-inline', children=[states_xat, states_soh]),
+                html.Div(id='number-alarms', children=i, hidden=True)]
+
     elif tab == 'alarms_in_progress':
         nc_alarms_list = []
         i = 0
@@ -1137,5 +1208,5 @@ if __name__ == '__main__':
     else:
         del client
 
-    client_oracle.close()
-    del client_oracle
+    client_oracle_xat.close()
+    del client_oracle_xat

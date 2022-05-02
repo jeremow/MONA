@@ -13,6 +13,13 @@ def format_date_to_str(number, nb_digit):
         return '0'+format_date_to_str(number, nb_digit-1)
 
 
+def format_states_dt(timestamp):
+    return f"D{format_date_to_str(timestamp.year, 4)}-{format_date_to_str(timestamp.month, 2)}" \
+           f"-{format_date_to_str(timestamp.day,2)}" \
+           f"T{format_date_to_str(timestamp.hour, 2)}:{format_date_to_str(timestamp.minute, 2)}" \
+           f":{format_date_to_str(timestamp.second, 2)}"
+
+
 def get_network_list(type_connection, network_list, network_list_values,
                      server_hostname=None, server_port=None, folder_file=None):
 
