@@ -24,6 +24,10 @@ class HatOracleClient:
         try:
             self.conn = cx_Oracle.connect(user=USER_ORACLE_XAT, password=PWD_ORACLE_XAT, dsn=self.dsn_tns)
             self.cursor = self.conn.cursor()
+            self.stations = []
+            self.cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE_XAT} GROUP BY STATION_NAME')
+            for row in self.cursor:
+                self.stations.append(row[0])
         except cx_Oracle.ProgrammingError:
             print('Connection error for HatOracleClient')
         except cx_Oracle.DatabaseError:
@@ -38,14 +42,8 @@ class HatOracleClient:
         :return: Nothing
         """
         try:
-            stations = []
             states_data = f"<server ip='{HOST_ORACLE_XAT}' port='{PORT_ORACLE_XAT}'>"
-
-            self.cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE_XAT} GROUP BY STATION_NAME')
-            for row in self.cursor:
-                stations.append(row[0])
-
-            for sta in stations:
+            for sta in self.stations:
                 states_data += f"<station name='{sta}'>"
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_XAT} WHERE '
                                     f'STATION_NAME=:sta AND IS_DATA=:data ORDER BY TIME DESC',
@@ -264,6 +262,14 @@ class SOHOracleClient:
         try:
             self.conn = cx_Oracle.connect(user=USER_ORACLE_SOH, password=PWD_ORACLE_SOH, dsn=self.dsn_tns)
             self.cursor = self.conn.cursor()
+
+            self.stations = []
+            for TABLE in TABLE_ORACLE_SOH:
+                self.cursor.execute(f'SELECT STATION FROM {TABLE} GROUP BY STATION')
+                for row in self.cursor:
+                    sta = row[0]
+                    if sta not in self.stations:
+                        self.stations.append(sta)
         except cx_Oracle.ProgrammingError:
             print('Connection error for SOHOracleClient')
         except cx_Oracle.DatabaseError:
@@ -279,17 +285,10 @@ class SOHOracleClient:
         :return: Nothing
         """
         try:
-            stations = []
+
             states_data = f"<server ip='{HOST_ORACLE_SOH}' port='{PORT_ORACLE_SOH}'>"
 
-            for TABLE in TABLE_ORACLE_SOH:
-                self.cursor.execute(f'SELECT STATION FROM {TABLE} GROUP BY STATION')
-                for row in self.cursor:
-                    sta = row[0]
-                    if sta not in stations:
-                        stations.append(sta)
-
-            for sta in stations:
+            for sta in self.stations:
                 states_data += f"<station name='{sta}'>"
 
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[0]} WHERE STATION=:sta ORDER BY DATE1 DESC',

@@ -61,7 +61,7 @@ server = app.server
 
 try:
     del time_graphs_names, time_graphs, fig_list, network_list, network_list_values, interval_time_graphs, client, \
-        client_oracle_xat
+        client_oracle_xat, client_oracle_soh
 except NameError:
     pass
 
@@ -74,6 +74,7 @@ interval_time_graphs = []
 client = None
 client_thread = None
 client_oracle_xat = HatOracleClient()
+client_oracle_soh = SOHOracleClient()
 
 # Remove all the data residual files if they exist
 delete_residual_data()
@@ -507,20 +508,12 @@ def update_list_station(n_clicks):
     :param n_clicks:
     :return Dropdown to select the stations available:
     """
-    station_hat_list = []
-    try:
+    global client_oracle_xat
+    global client_oracle_soh
+    stations = client_oracle_xat.stations + client_oracle_soh.stations
 
-        with open(f'log/server/states_xat.xml', 'r', encoding='utf-8') as fp:
-            content = fp.read()
-            bs_states = BS(content, 'lxml-xml')
-        for bs_station in bs_states.find_all('station'):
-            station_name = bs_station.get('name')
-            station_hat_list.append({'label': station_name, 'value': station_name})
-
-    except FileNotFoundError:
-        print('No file for Health States found. Please verify log/server/states_xat.xml')
     return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
-                         options=station_hat_list, multi=False, style={'color': 'black'})]
+                         options=stations, multi=False, style={'color': 'black'})]
 
 
 @app.callback(Output('health-states', 'children'),
