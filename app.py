@@ -510,7 +510,13 @@ def update_list_station(n_clicks):
     """
     global client_oracle_xat
     global client_oracle_soh
-    stations = client_oracle_xat.stations + client_oracle_soh.stations
+    stations = []
+
+    for sta in client_oracle_xat.stations:
+        stations.append({'label': sta, 'value': sta})
+    for sta in client_oracle_soh.stations:
+        stations.append({'label': sta, 'value': sta})
+
 
     return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
                          options=stations, multi=False, style={'color': 'black'})]

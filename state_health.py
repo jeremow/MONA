@@ -27,6 +27,7 @@ class HatOracleClient:
             self.stations = []
             self.cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE_XAT} GROUP BY STATION_NAME')
             for row in self.cursor:
+                print(row[0])
                 self.stations.append(row[0])
         except cx_Oracle.ProgrammingError:
             print('Connection error for HatOracleClient')
@@ -142,6 +143,7 @@ class HatOracleClient:
             print('No states file found')
 
     def analyze_alarm(self, station, alarm, dt):
+        print(station, alarm, dt)
         try:
             with open('log/server/alarms.xml', 'r', encoding='utf-8'):
                 pass
@@ -257,7 +259,7 @@ class SOHOracleClient:
             print(e)
             print(f"Variable CLIENT_ORACLE_SOH for the Oracle Client software not/badly configured in config.py.\n"
                   f"Value: {CLIENT_ORACLE_SOH}.")
-            exit(1)
+
         self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_SOH, PORT_ORACLE_SOH, service_name=SERVICE_ORACLE_SOH)
         try:
             self.conn = cx_Oracle.connect(user=USER_ORACLE_SOH, password=PWD_ORACLE_SOH, dsn=self.dsn_tns)
@@ -268,6 +270,7 @@ class SOHOracleClient:
                 self.cursor.execute(f'SELECT STATION FROM {TABLE} GROUP BY STATION')
                 for row in self.cursor:
                     sta = row[0]
+                    print(sta)
                     if sta not in self.stations:
                         self.stations.append(sta)
         except cx_Oracle.ProgrammingError:
