@@ -73,8 +73,6 @@ network_list_values = []
 interval_time_graphs = []
 client = None
 client_thread = None
-client_oracle_xat = HatOracleClient()
-client_oracle_soh = SOHOracleClient()
 
 # Remove all the data residual files if they exist
 delete_residual_data()
@@ -511,12 +509,16 @@ def update_list_station(n_clicks):
     global client_oracle_xat
     global client_oracle_soh
     stations = []
+    stations_names = []
 
     for sta in client_oracle_xat.stations:
         stations.append({'label': sta, 'value': sta})
+        stations_names.append(sta)
     for sta in client_oracle_soh.stations:
         stations.append({'label': sta, 'value': sta})
+        stations_names.append(sta)
 
+    print(f"{len(stations_names)} stations found for XAT/SOH: {stations_names}")
 
     return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
                          options=stations, multi=False, style={'color': 'black'})]
@@ -537,9 +539,11 @@ def update_states(station_name, n_intervals, tab):
     states = []
     states_list = []
     global client_oracle_xat
+    global client_oracle_soh
 
     try:
         client_oracle_xat.write_state_health()
+        client_oracle_soh.write_state_health()
     except cx_Oracle.ProgrammingError:
         print('Connection error for HatOracleClient')
     except cx_Oracle.DatabaseError:
@@ -558,43 +562,42 @@ def update_states(station_name, n_intervals, tab):
 
         except FileNotFoundError:
             pass
+        except AttributeError:
+            pass
 
-        table_inside = []
-        for state in states:
-            if state[2] == 0:
-                text_badge = "OK"
-                color = "success"
-            elif state[2] == 1:
-                text_badge = "Warning"
-                color = "warning"
-            elif state[2] == 2:
-                text_badge = "Critic"
-                color = "danger"
-            else:
-                text_badge = "N/A"
-                color = "secondary"
+        try:
+            with open(f'log/{tab}/states_soh.xml', 'r', encoding='utf-8') as fp:
+                content = fp.read()
+                bs_states = BS(content, 'lxml-xml')
+            bs_station = bs_states.find('station', {'name': station_name})
+            for state in bs_station.find_all('state'):
+                states.append([state.get('name'), state.get('value'), int(state.get('problem'))])
 
-            table_inside.append(html.Tr(
-                [html.Td(state[0]),
-                 html.Td(state[1]),
-                 html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))
-                 ]
-            ))
+        except FileNotFoundError:
+            pass
+        except AttributeError:
+            pass
 
-        table_body = [html.Tbody(table_inside)]
-
-        states_list = dbc.Table(table_body,
-                                bordered=True,
-                                dark=True,
-                                hover=True,
-                                responsive=True,
-                                striped=True
-                                )
-
-    # try:
-    #     create_alarm_from_HAT(tab)
-    # except AttributeError:
-    #     print('Wrong server to create alarms')
+        # for state in states:
+        #     if state[2] == 0:
+        #         text_badge = "OK"
+        #         color = "success"
+        #     elif state[2] == 1:
+        #         text_badge = "Warning"
+        #         color = "warning"
+        #     elif state[2] == 2:
+        #         text_badge = "Critic"
+        #         color = "danger"
+        #     else:
+        #         text_badge = "N/A"
+        #         color = "secondary"
+        #
+        #     table_inside.append(html.Tr(
+        #         [html.Td(state[0]),
+        #          html.Td(state[1]),
+        #          html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))
+        #          ]
+        #     ))
 
     return html.Div(id='health-states', children=states_list)
 
@@ -821,7 +824,7 @@ graph_bottom = html.Div(
                      dbc.Tab(label='Alarms in progress', tab_id='alarms_in_progress'),
                      dbc.Tab(label='Alarms completed', tab_id='alarms_completed'),
                     ],
-                 active_tab='alarms_in_progress'),
+                 active_tab='soh'),
         html.Div(id='tabs-content-inline')
     ],
     # style=CHILD
@@ -1193,6 +1196,10 @@ if __name__ == '__main__':
     else:
         log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
 
+    init_oracle_client(CLIENT_ORACLE)
+    client_oracle_xat = HatOracleClient()
+    client_oracle_soh = SOHOracleClient()
+
     app.run_server(host=SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG, threaded=True)
 
     # ACTIONS TO EXECUTE IF SOFTWARE QUIT
@@ -1208,4 +1215,5 @@ if __name__ == '__main__':
         del client
 
     client_oracle_xat.close()
-    del client_oracle_xat
+    client_oracle_soh.close()
+    del client_oracle_xat, client_oracle_soh

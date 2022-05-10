@@ -2,7 +2,7 @@ import cx_Oracle
 from config import *
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup as bs
-from utils import format_date_to_str, format_states_dt
+from utils import format_date_to_str, format_states_dt, base10_to_base2_str
 
 
 class HatOracleClient:
@@ -13,13 +13,7 @@ class HatOracleClient:
     before using it.
     """
     def __init__(self):
-        try:
-            cx_Oracle.init_oracle_client(CLIENT_ORACLE_XAT)
-        except cx_Oracle.DatabaseError as e:
-            print(e)
-            print(f"Variable CLIENT_ORACLE_XAT for the Oracle Client software not/badly configured in config.py.\n"
-                  f"Value: {CLIENT_ORACLE_XAT}.")
-            exit(1)
+
         self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_XAT, PORT_ORACLE_XAT, service_name=SERVICE_ORACLE_XAT)
         try:
             self.conn = cx_Oracle.connect(user=USER_ORACLE_XAT, password=PWD_ORACLE_XAT, dsn=self.dsn_tns)
@@ -27,7 +21,6 @@ class HatOracleClient:
             self.stations = []
             self.cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE_XAT} GROUP BY STATION_NAME')
             for row in self.cursor:
-                print(row[0])
                 self.stations.append(row[0])
         except cx_Oracle.ProgrammingError:
             print('Connection error for HatOracleClient')
@@ -66,23 +59,23 @@ class HatOracleClient:
 
                     timestamp = row[0]
 
-                    vault0_temperature = row[2]
-                    vault0_humidity = row[3]
-                    vault1_temperature = row[4]
-                    vault1_humidity = row[5]
-                    seismometer_temperature = row[6]
-                    outside_temperature = row[7]
-                    vpn_voltage = row[8]
-                    vpn_current = row[9]
-                    telemeter_voltage = row[10]
-                    telemeter_current = row[11]
-                    digitizer_voltage = row[12]
-                    digitizer_current = row[13]
-                    computer_voltage = row[14]
-                    computer_current = row[15]
-                    device_voltage = row[16]
-                    device_current = row[17]
-                    sensor1_value = row[18]
+                    vault0_temperature = row[3]
+                    vault0_humidity = row[4]
+                    vault1_temperature = row[5]
+                    vault1_humidity = row[6]
+                    seismometer_temperature = row[7]
+                    outside_temperature = row[8]
+                    vpn_voltage = row[9]
+                    vpn_current = row[10]
+                    telemeter_voltage = row[11]
+                    telemeter_current = row[12]
+                    digitizer_voltage = row[13]
+                    digitizer_current = row[14]
+                    computer_voltage = row[15]
+                    computer_current = row[16]
+                    device_voltage = row[20]
+                    device_current = row[21]
+                    sensor1_value = base10_to_base2_str(row[19])
 
 
                     # self.verify_states(humidity=humidity,
@@ -103,13 +96,13 @@ class HatOracleClient:
                     <state name='VPN Voltage' datetime='{dt}' value='{vpn_voltage}V' problem='0'/> 
                     <state name='VPN Current' datetime='{dt}' value='{vpn_current}A' problem='0'/> 
                     <state name='Telemeter Voltage' datetime='{dt}' value='{telemeter_voltage}V' problem='0'/> 
-                    <state name='Telemeter Current' datetime='{dt}' value='{telemeter_current}A' problem='0'/> 
+                    <state name='Telemeter Current' datetime='{dt}' value='{telemeter_current}mA' problem='0'/> 
                     <state name='Digitizer Voltage' datetime='{dt}' value='{digitizer_voltage}V' problem='0'/> 
-                    <state name='Digitizer Current' datetime='{dt}' value='{digitizer_current}A' problem='0'/> 
+                    <state name='Digitizer Current' datetime='{dt}' value='{digitizer_current}mA' problem='0'/> 
                     <state name='Computer Voltage' datetime='{dt}' value='{computer_voltage}V' problem='0'/> 
-                    <state name='Computer Current' datetime='{dt}' value='{computer_current}A' problem='0'/> 
+                    <state name='Computer Current' datetime='{dt}' value='{computer_current}mA' problem='0'/> 
                     <state name='Device Voltage' datetime='{dt}' value='{device_voltage}V' problem='0'/> 
-                    <state name='Device Current' datetime='{dt}' value='{device_current}A' problem='0'/>
+                    <state name='Device Current' datetime='{dt}' value='{device_current}mA' problem='0'/>
                     <state name='Saxiul XAT' datetime='{dt}' value='{sensor1_value[0]}' problem='0'/>
                     <state name='Water XAT' datetime='{dt}' value='{sensor1_value[1]}' problem='0'/>
                     <state name='Door 1 XAT' datetime='{dt}' value='{sensor1_value[2]}' problem='0'/>
@@ -125,9 +118,10 @@ class HatOracleClient:
                                     sta=sta, data='Alarm')
                 for row in self.cursor:
                     timestamp = row[0]
-                    alarm = row[19]
+                    alarm = row[20]
                     dt = format_states_dt(timestamp)
-                    self.analyze_alarm(sta, alarm, dt)
+                    if alarm is not None:
+                        self.analyze_alarm(sta, alarm, dt)
                     break  # to leave the current cursor after getting the last value
 
             states_data += f"</server>"
@@ -253,13 +247,6 @@ class SOHOracleClient:
     configuration before using it.
     """
     def __init__(self):
-        try:
-            cx_Oracle.init_oracle_client(CLIENT_ORACLE_SOH)
-        except cx_Oracle.DatabaseError as e:
-            print(e)
-            print(f"Variable CLIENT_ORACLE_SOH for the Oracle Client software not/badly configured in config.py.\n"
-                  f"Value: {CLIENT_ORACLE_SOH}.")
-
         self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_SOH, PORT_ORACLE_SOH, service_name=SERVICE_ORACLE_SOH)
         try:
             self.conn = cx_Oracle.connect(user=USER_ORACLE_SOH, password=PWD_ORACLE_SOH, dsn=self.dsn_tns)
@@ -270,7 +257,6 @@ class SOHOracleClient:
                 self.cursor.execute(f'SELECT STATION FROM {TABLE} GROUP BY STATION')
                 for row in self.cursor:
                     sta = row[0]
-                    print(sta)
                     if sta not in self.stations:
                         self.stations.append(sta)
         except cx_Oracle.ProgrammingError:
@@ -297,49 +283,49 @@ class SOHOracleClient:
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[0]} WHERE STATION=:sta ORDER BY DATE1 DESC',
                                     sta=sta)
                 for row in self.cursor:
-                    timestamp = row[0]
-                    used_disksize = row[1]
-                    available_disksize = row[2]
-                    total_disksize = row[3]
+                    timestamp = row[1]
+                    used_disksize = row[2]
+                    available_disksize = row[3]
+                    total_disksize = row[4]
 
                     dt = format_states_dt(timestamp)
 
                     states_data += f"""
-                    <state name='Used Disk size' datetime='{dt}' value='{used_disksize}' /> 
-                    <state name='Available Disk size' datetime='{dt}' value='{available_disksize}' /> 
-                    <state name='Total Disk size' datetime='{dt}' value='{total_disksize}' /> 
+                    <state name='Used Disk size' datetime='{dt}' value='{used_disksize}' problem='0' /> 
+                    <state name='Available Disk size' datetime='{dt}' value='{available_disksize}' problem='0' /> 
+                    <state name='Total Disk size' datetime='{dt}' value='{total_disksize}' problem='0' /> 
                     """
                     break  # to leave the current cursor after getting the last value
 
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[1]} WHERE STATION=:sta ORDER BY DATE1 DESC',
                                     sta=sta)
                 for row in self.cursor:
-                    timestamp = row[0]
-                    e_massposition = row[1]
-                    n_massposition = row[2]
-                    z_massposition = row[3]
+                    timestamp = row[1]
+                    e_massposition = row[2]
+                    n_massposition = row[3]
+                    z_massposition = row[4]
 
                     dt = format_states_dt(timestamp)
 
                     states_data += f"""
-                    <state name='E Mass position' datetime='{dt}' value='{e_massposition}' /> 
-                    <state name='N Mass position' datetime='{dt}' value='{n_massposition}' /> 
-                    <state name='Z Mass position' datetime='{dt}' value='{z_massposition}' /> 
+                    <state name='E Mass position' datetime='{dt}' value='{e_massposition}' problem='0' /> 
+                    <state name='N Mass position' datetime='{dt}' value='{n_massposition}' problem='0' /> 
+                    <state name='Z Mass position' datetime='{dt}' value='{z_massposition}' problem='0' /> 
                     """
                     break  # to leave the current cursor after getting the last value
 
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[2]} WHERE STATION=:sta ORDER BY DATE1 DESC',
                                     sta=sta)
                 for row in self.cursor:
-                    timestamp = row[0]
+                    timestamp = row[3]
                     battery_voltage = row[1]
                     temperature = row[2]
 
                     dt = format_states_dt(timestamp)
 
                     states_data += f"""
-                    <state name='Battery voltage station' datetime='{dt}' value='{battery_voltage}' /> 
-                    <state name='Temperature' datetime='{dt}' value='{temperature}' /> 
+                    <state name='Battery voltage station' datetime='{dt}' value='{battery_voltage}' problem='0' /> 
+                    <state name='Temperature' datetime='{dt}' value='{temperature}' problem='0' /> 
                     """
                     break
 
@@ -362,3 +348,50 @@ class SOHOracleClient:
     def close(self):
         self.cursor.close()
         self.conn.close()
+
+
+def init_oracle_client(path_to_client):
+    print(f'Initializing Oracle client to {path_to_client}')
+    try:
+        cx_Oracle.init_oracle_client(path_to_client)
+    except cx_Oracle.DatabaseError as e:
+        print(e)
+        print(f"Variable CLIENT_ORACLE for the Oracle Client software not/badly configured in config.py.\n"
+              f"Value: {path_to_client}.")
+
+
+if __name__ == '__main__':
+    cx_Oracle.init_oracle_client(CLIENT_ORACLE)
+    dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_XAT, PORT_ORACLE_XAT, service_name=SERVICE_ORACLE_XAT)
+    conn = cx_Oracle.connect(user=USER_ORACLE_XAT, password=PWD_ORACLE_XAT, dsn=dsn_tns)
+    cursor = conn.cursor()
+    stations = []
+    cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE_XAT} GROUP BY STATION_NAME')
+    for row in cursor:
+        print(row[0])
+        stations.append(row[0])
+
+    for sta in stations:
+        cursor.execute(f'SELECT * FROM {TABLE_ORACLE_XAT} WHERE '
+                            f'STATION_NAME=:sta AND IS_DATA=:data ORDER BY TIME DESC',
+                            sta=sta, data='Data')
+        for row in cursor:
+            print(row)
+            break
+
+    dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_SOH, PORT_ORACLE_SOH, service_name=SERVICE_ORACLE_SOH)
+    conn = cx_Oracle.connect(user=USER_ORACLE_SOH, password=PWD_ORACLE_SOH, dsn=dsn_tns)
+    cursor = conn.cursor()
+    stations = []
+    cursor.execute(f'SELECT STATION FROM {TABLE_ORACLE_SOH[0]} GROUP BY STATION')
+    for row in cursor:
+        print(row[0])
+        stations.append(row[0])
+
+    for sta in stations:
+        cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[0]} WHERE '
+                            f'STATION=:sta ORDER BY DATE1 DESC',
+                            sta=sta)
+        for row in cursor:
+            print(row)
+            break

@@ -13,7 +13,7 @@ from obspy.clients.seedlink.easyseedlink import EasySeedLinkClient
 from obspy.clients.seedlink.seedlinkexception import SeedLinkException
 from obspy.clients.seedlink.slpacket import SLPacket
 
-from obspy import read_inventory
+from obspy import UTCDateTime
 
 from config import *
 
@@ -42,7 +42,8 @@ class EasySLC(EasySeedLinkClient):
 
     def on_data(self, tr):
         print(tr)
-        if tr is not None:
+        t_start = UTCDateTime()
+        if tr is not None and t_start - tr.stats.starttime <= 300:
 
             tr.resample(sampling_rate=SAMPLING_RATE)
             tr.detrend(type='constant')
@@ -64,18 +65,27 @@ class EasySLC(EasySeedLinkClient):
                 data_sta = new_data_sta
             data_sta = data_sta.reset_index(drop=True)
             data_sta.to_feather(BUFFER_DIR + '/' + station + '.data')
+
+        elif t_start - tr.stats.starttime > 300:
+            print(f'blockette is too old ({(t_start - tr.stats.starttime) / 60} min).')
         else:
             print("blockette contains no trace")
 
     def run(self):
-        streams = []
+
         if self.data_retrieval is False:
             while True:
                 try:
                     with open(BUFFER_DIR+'/streams.data', 'r') as file:
                         new_streams = file.read().splitlines()
-                        if streams != new_streams:
-                            self.on_terminate()
+                        if self.streams != new_streams:
+                            self._EasySeedLinkClient__streaming_started = False
+                            # streams = self.conn.streams.copy()
+                            del self.conn
+                            self.conn = SeedLinkConnection(timeout=30)
+                            self.conn.set_sl_address('%s:%d' %
+                                                     (self.server_hostname, self.server_port))
+                            self.conn.multistation = True
                             for station in new_streams[1:]:
                                 full_sta_name = station.split('.')
                                 net = full_sta_name[0]
@@ -83,7 +93,8 @@ class EasySLC(EasySeedLinkClient):
                                 cha = full_sta_name[2] + full_sta_name[3]
                                 self.select_stream(net, sta, cha)
 
-                            streams = new_streams.copy()
+                            self.streams = new_streams.copy()
+
                 except FileNotFoundError:
                     print('WAITING FOR STREAM FILE OF MONA-LISA')
                     time.sleep(5)
@@ -94,11 +105,12 @@ class EasySLC(EasySeedLinkClient):
                     if self.data_retrieval:
                         self.on_terminate()
                         break
+
                     data = self.conn.collect()
 
                     if data == SLPacket.SLTERMINATE:
                         self.on_terminate()
-                        break
+                        continue
                     elif data == SLPacket.SLERROR:
                         self.on_seedlink_error()
                         continue
@@ -138,7 +150,7 @@ class EasySLC(EasySeedLinkClient):
                 while data is not None:
                     if data == SLPacket.SLTERMINATE:
                         self.on_terminate()
-                        break
+                        continue
 
                     elif data == SLPacket.SLERROR:
                         self.on_seedlink_error()
@@ -160,32 +172,30 @@ class EasySLC(EasySeedLinkClient):
                             self.on_data(trace)
                         data = self.conn.collect()
 
-
     # ADAPT
     def on_terminate(self):
         self._EasySeedLinkClient__streaming_started = False
-        self.close()
-
+        streams = self.conn.streams.copy()
         del self.conn
         self.conn = SeedLinkConnection(timeout=30)
         self.conn.set_sl_address('%s:%d' %
                                  (self.server_hostname, self.server_port))
-        if self.data_retrieval is False:
-            self.connect()
+        self.conn.multistation = True
+        self.conn.streams = streams.copy()
+        # if self.data_retrieval is False:
+        #     self.connect()
 
         # self.conn.begin_time = UTCDateTime()
 
     def on_seedlink_error(self):
         self._EasySeedLinkClient__streaming_started = False
-        self.close()
         self.streams = self.conn.streams.copy()
         del self.conn
-        if self.data_retrieval is False:
-            self.conn = SeedLinkConnection(timeout=30)
-            self.conn.set_sl_address('%s:%d' %
-                                     (self.server_hostname, self.server_port))
-            self.conn.streams = self.streams.copy()
-            self.run()
+        self.conn = SeedLinkConnection(timeout=30)
+        self.conn.set_sl_address('%s:%d' %
+                                 (self.server_hostname, self.server_port))
+        self.conn.multistation = True
+        self.conn.streams = self.streams.copy()
 
 
 class SLThread(Thread):

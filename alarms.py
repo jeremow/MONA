@@ -196,9 +196,8 @@ def closest_index_of_list(L, value):
 
 def get_arguments():
     """returns AttribDict with command line arguments"""
-    parser = argparse.ArgumentParser(
-        description='launch the alarms system',
-        formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(description='launch the alarms system',
+                                     formatter_class=argparse.RawTextHelpFormatter)
 
     # Script functionalities
     parser.add_argument('-s', '--server', help='Path to SL server', required=True)

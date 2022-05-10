@@ -7,7 +7,7 @@ VERBOSE: int = 0
 SERVER_DASH_IP: str = "127.0.0.1"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"
-DEBUG: bool = True
+DEBUG: bool = False
 
 # AREA AND STATIONS
 NAME_AREA: str = "UB (France)"
@@ -48,8 +48,10 @@ RIGHT_GRAPH: int = 10
 # DATA BUFFER
 BUFFER_DIR: str = 'data'
 
+# ORACLE CLIENT
+CLIENT_ORACLE: str = r'C:\app\instantclient_11_2'
+
 # HAT ORACLE CLIENT
-CLIENT_ORACLE_XAT: str = r'C:\app\instantclient_11_2'
 HOST_ORACLE_XAT: str = '192.168.1.76'
 PORT_ORACLE_XAT: str = '1522'
 SERVICE_ORACLE_XAT: str = 'hatdb2'
@@ -66,13 +68,12 @@ XAT_NORMAL_STATE: dict = {
 }
 
 # SOH ORACLE CLIENT
-CLIENT_ORACLE_SOH: str = r'C:\app\instantclient_11_2'
 HOST_ORACLE_SOH: str = '192.168.1.78'
 PORT_ORACLE_SOH: str = '1521'
 SERVICE_ORACLE_SOH: str = 'xe'
 USER_ORACLE_SOH: str = r'sohdata'
 PWD_ORACLE_SOH: str = 'tdb'
-TABLE_ORACLE_SOH: list = ['DISKSIZE', 'MASS_POSITION', 'BATTERYVOLTAGE']
+TABLE_ORACLE_SOH: list = ['DISKSIZE1', 'MASS_POSITION', 'BATTERYVOLTAGE']
 
 # SEISMIC CONFIG
 XML_INVENTORY: str = ""

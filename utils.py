@@ -14,10 +14,23 @@ def format_date_to_str(number, nb_digit):
 
 
 def format_states_dt(timestamp):
-    return f"D{format_date_to_str(timestamp.year, 4)}-{format_date_to_str(timestamp.month, 2)}" \
-           f"-{format_date_to_str(timestamp.day,2)}" \
-           f"T{format_date_to_str(timestamp.hour, 2)}:{format_date_to_str(timestamp.minute, 2)}" \
-           f":{format_date_to_str(timestamp.second, 2)}"
+    return f"D{format_date_to_str(timestamp.year, 4)}{format_date_to_str(timestamp.month, 2)}" \
+           f"{format_date_to_str(timestamp.day,2)}" \
+           f"T{format_date_to_str(timestamp.hour, 2)}{format_date_to_str(timestamp.minute, 2)}" \
+           f"{format_date_to_str(timestamp.second, 2)}"
+
+
+def base10_to_base2_str(num):
+    if num % 2 != 0:
+        return 0
+    div = num // 2
+    r = num % 2
+    num_base2 = str(r)
+    while div != 1 and div != 0:
+        num_base2 = str(r) + num_base2
+        div = div // 2
+        r = div % 2
+    return str(div) + num_base2
 
 
 def get_network_list(type_connection, network_list, network_list_values,
