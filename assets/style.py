@@ -3,7 +3,7 @@ MARGIN_LEFT = "20%"
 
 SIDEBAR_STYLE = {
     "padding": "1rem 1rem 1rem 1rem",
-    "height": "100%",
+    "height": "300%",
     # "margin-right": "2rem",
     "background-color": "#111111",
     "font-family": "Tw Cen MT"
