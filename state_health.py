@@ -75,8 +75,8 @@ class HatOracleClient:
                     computer_current = row[16]
                     device_voltage = row[20]
                     device_current = row[21]
-                    sensor1_value = base10_to_base2_str(row[19])
-
+                    sensor1_value_base2 = base10_to_base2_str(row[19])
+                    sensor1_value = [sensor1_value_base2[0], sensor1_value_base2[1], 'open' if sensor1_value_base2[2] == '1' else 'close', 'open' if sensor1_value_base2[3] == '1' else 'close', sensor1_value_base2[4], sensor1_value_base2[5], sensor1_value_base2[6], sensor1_value_base2[7]]
 
                     # self.verify_states(humidity=humidity,
                     #                    temp=temp,
@@ -94,7 +94,7 @@ class HatOracleClient:
                     <state name='Temperature Seismometer' datetime='{dt}' value='{seismometer_temperature}°C' problem='0'/> 
                     <state name='Temperature Outside' datetime='{dt}' value='{outside_temperature}°C' problem='0'/> 
                     <state name='VPN Voltage' datetime='{dt}' value='{vpn_voltage}V' problem='0'/> 
-                    <state name='VPN Current' datetime='{dt}' value='{vpn_current}A' problem='0'/> 
+                    <state name='VPN Current' datetime='{dt}' value='{vpn_current}mA' problem='0'/> 
                     <state name='Telemeter Voltage' datetime='{dt}' value='{telemeter_voltage}V' problem='0'/> 
                     <state name='Telemeter Current' datetime='{dt}' value='{telemeter_current}mA' problem='0'/> 
                     <state name='Digitizer Voltage' datetime='{dt}' value='{digitizer_voltage}V' problem='0'/> 

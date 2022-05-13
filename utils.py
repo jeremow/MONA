@@ -30,7 +30,11 @@ def base10_to_base2_str(num):
         num_base2 = str(r) + num_base2
         div = div // 2
         r = div % 2
-    return str(div) + num_base2
+    res = str(div) + num_base2
+    if len(res) < 8:
+        while len(res) != 8:
+            res = '0' + res 
+    return res
 
 
 def get_network_list(type_connection, network_list, network_list_values,
