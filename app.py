@@ -48,13 +48,13 @@ from simpleaudio._simpleaudio import SimpleaudioError
 # from alarms import create_alarm_from_HAT
 
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA-LISA - Updating Data",
-                external_stylesheets=[dbc.themes.CYBORG])
+app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA - Updating Data",
+                )
 
-# app.css.config.serve_locally = True
-# app.scripts.config.serve_locally = True
+app.css.config.serve_locally = True
+app.scripts.config.serve_locally = True
 
-app.title = 'MONA-LISA'
+app.title = 'MONA-JH'
 server = app.server
 # global variables which are useful, dash will say remove these variables, I say let them exist, else I will have
 # problems between some callbacks.
@@ -86,7 +86,7 @@ encoded_logo = base64.b64encode(open(logo_filename, 'rb').read())
 sidebar_top = html.Div(
     [
         # Picture and title
-        html.H2([html.Img(src='data:image/jpg;base64,{}'.format(encoded_logo.decode()), height=80), " MONA-LISA"], className="display-5"),
+        html.H2([html.Img(src='data:image/jpg;base64,{}'.format(encoded_logo.decode()), height=80), " MONA-JH"], className="display-5"),
         html.P(
             [
                 "Monitoring App of the IAG - " + NAME_AREA
@@ -173,7 +173,6 @@ def render_connection(tab):
             html.Br(),
             html.H4('Time graphs stations'),
             html.Div(id='container-button-basic',
-                     style={'textarea:color': 'black'},
                      children=[
                              dcc.Dropdown(id='network-list-active',
                                              placeholder='Select stations for time graphs',
