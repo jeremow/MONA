@@ -73,6 +73,9 @@ network_list_values = []
 interval_time_graphs = []
 client = None
 client_thread = None
+init_oracle_client(CLIENT_ORACLE)
+client_oracle_xat = HatOracleClient()
+client_oracle_soh = SOHOracleClient()
 
 # Remove all the data residual files if they exist
 delete_residual_data()
@@ -1196,10 +1199,6 @@ if __name__ == '__main__':
 #        webbrowser.open(SERVER_DASH_PROTOCOL + SERVER_DASH_IP + ':' + str(SERVER_DASH_PORT))
 #    else:
 #        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
-
-    init_oracle_client(CLIENT_ORACLE)
-    client_oracle_xat = HatOracleClient()
-    client_oracle_soh = SOHOracleClient()
 
     app.run_server(host=SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG, threaded=True)
 

@@ -4,7 +4,7 @@ import pandas as pd
 
 VERBOSE: int = 0
 
-SERVER_DASH_IP: str = "192.168.1.74"
+SERVER_DASH_IP: str = "192.168.1.76"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"
 DEBUG: bool = False
@@ -49,7 +49,7 @@ RIGHT_GRAPH: int = 10
 BUFFER_DIR: str = 'data'
 
 # ORACLE CLIENT
-CLIENT_ORACLE: str = r'C:\app\instantclient_11_2'
+CLIENT_ORACLE: str = r'/u01/app/oracle/product/19.3.0/dbhome_1/lib'
 
 # HAT ORACLE CLIENT
 HOST_ORACLE_XAT: str = '192.168.1.76'
