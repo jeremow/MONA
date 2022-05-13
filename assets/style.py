@@ -6,13 +6,13 @@ SIDEBAR_STYLE = {
     "height": "300%",
     # "margin-right": "2rem",
     "background-color": "#111111",
-    "font-family": "Tw Cen MT"
+    "font-family": "Helvetica"
 }
 
 GRAPH_STYLE = {
     "margin-right": "2rem",
     "padding": "1rem 2rem",
-    "font-family": "Tw Cen MT"
+    "font-family": "Helvetica"
 }
 
 ROW = {
