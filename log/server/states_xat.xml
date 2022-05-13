@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<server ip="192.168.1.76" port="1522">
+ <station name="UB4M">
+  <state datetime="D20220513T104807" name="Temperature Station vault" problem="0" value="9.1°C"/>
+  <state datetime="D20220513T104807" name="Humidity Station vault" problem="0" value="46.9%"/>
+  <state datetime="D20220513T104807" name="Temperature Second vault" problem="0" value="None°C"/>
+  <state datetime="D20220513T104807" name="Humidity Second vault" problem="0" value="None%"/>
+  <state datetime="D20220513T104807" name="Temperature Seismometer" problem="0" value="3.15°C"/>
+  <state datetime="D20220513T104807" name="Temperature Outside" problem="0" value="0.74°C"/>
+  <state datetime="D20220513T104807" name="VPN Voltage" problem="0" value="11.69V"/>
+  <state datetime="D20220513T104807" name="VPN Current" problem="0" value="-250A"/>
+  <state datetime="D20220513T104807" name="Telemeter Voltage" problem="0" value="11.64V"/>
+  <state datetime="D20220513T104807" name="Telemeter Current" problem="0" value="-186mA"/>
+  <state datetime="D20220513T104807" name="Digitizer Voltage" problem="0" value="11.6V"/>
+  <state datetime="D20220513T104807" name="Digitizer Current" problem="0" value="-525.6mA"/>
+  <state datetime="D20220513T104807" name="Computer Voltage" problem="0" value="11.53V"/>
+  <state datetime="D20220513T104807" name="Computer Current" problem="0" value="-1023.2mA"/>
+  <state datetime="D20220513T104807" name="Device Voltage" problem="0" value="11.85V"/>
+  <state datetime="D20220513T104807" name="Device Current" problem="0" value="144.65mA"/>
+  <state datetime="D20220513T104807" name="Saxiul XAT" problem="0" value="1"/>
+  <state datetime="D20220513T104807" name="Water XAT" problem="0" value="1"/>
+  <state datetime="D20220513T104807" name="Door 1 XAT" problem="0" value="0"/>
+  <state datetime="D20220513T104807" name="Door 2 XAT" problem="0" value="0"/>
+  <state datetime="D20220513T104807" name="Loop XAT" problem="0" value="1"/>
+ </station>
+ <station name="CCBM">
+  <state datetime="D20220502T094137" name="Temperature Station vault" problem="0" value="8.1°C"/>
+  <state datetime="D20220502T094137" name="Humidity Station vault" problem="0" value="59.2%"/>
+  <state datetime="D20220502T094137" name="Temperature Second vault" problem="0" value="None°C"/>
+  <state datetime="D20220502T094137" name="Humidity Second vault" problem="0" value="None%"/>
+  <state datetime="D20220502T094137" name="Temperature Seismometer" problem="0" value="2.69°C"/>
+  <state datetime="D20220502T094137" name="Temperature Outside" problem="0" value="17°C"/>
+  <state datetime="D20220502T094137" name="VPN Voltage" problem="0" value="11.38V"/>
+  <state datetime="D20220502T094137" name="VPN Current" problem="0" value="1.6A"/>
+  <state datetime="D20220502T094137" name="Telemeter Voltage" problem="0" value="11.38V"/>
+  <state datetime="D20220502T094137" name="Telemeter Current" problem="0" value="1.6mA"/>
+  <state datetime="D20220502T094137" name="Digitizer Voltage" problem="0" value="11.37V"/>
+  <state datetime="D20220502T094137" name="Digitizer Current" problem="0" value="2mA"/>
+  <state datetime="D20220502T094137" name="Computer Voltage" problem="0" value="11.37V"/>
+  <state datetime="D20220502T094137" name="Computer Current" problem="0" value="1.6mA"/>
+  <state datetime="D20220502T094137" name="Device Voltage" problem="0" value="11.39V"/>
+  <state datetime="D20220502T094137" name="Device Current" problem="0" value="143.93mA"/>
+  <state datetime="D20220502T094137" name="Saxiul XAT" problem="0" value="1"/>
+  <state datetime="D20220502T094137" name="Water XAT" problem="0" value="0"/>
+  <state datetime="D20220502T094137" name="Door 1 XAT" problem="0" value="0"/>
+  <state datetime="D20220502T094137" name="Door 2 XAT" problem="0" value="1"/>
+  <state datetime="D20220502T094137" name="Loop XAT" problem="0" value="0"/>
+ </station>
+ <station name="TEST">
+  <state datetime="D20220513T104817" name="Temperature Station vault" problem="0" value="16.8°C"/>
+  <state datetime="D20220513T104817" name="Humidity Station vault" problem="0" value="23.6%"/>
+  <state datetime="D20220513T104817" name="Temperature Second vault" problem="0" value="17.3°C"/>
+  <state datetime="D20220513T104817" name="Humidity Second vault" problem="0" value="23.7%"/>
+  <state datetime="D20220513T104817" name="Temperature Seismometer" problem="0" value="15.27°C"/>
+  <state datetime="D20220513T104817" name="Temperature Outside" problem="0" value="15.61°C"/>
+  <state datetime="D20220513T104817" name="VPN Voltage" problem="0" value="12.38V"/>
+  <state datetime="D20220513T104817" name="VPN Current" problem="0" value="2A"/>
+  <state datetime="D20220513T104817" name="Telemeter Voltage" problem="0" value="12.38V"/>
+  <state datetime="D20220513T104817" name="Telemeter Current" problem="0" value="1.6mA"/>
+  <state datetime="D20220513T104817" name="Digitizer Voltage" problem="0" value="12.38V"/>
+  <state datetime="D20220513T104817" name="Digitizer Current" problem="0" value="2mA"/>
+  <state datetime="D20220513T104817" name="Computer Voltage" problem="0" value="12.38V"/>
+  <state datetime="D20220513T104817" name="Computer Current" problem="0" value="2mA"/>
+  <state datetime="D20220513T104817" name="Device Voltage" problem="0" value="12.39V"/>
+  <state datetime="D20220513T104817" name="Device Current" problem="0" value="138.37mA"/>
+  <state datetime="D20220513T104817" name="Saxiul XAT" problem="0" value="1"/>
+  <state datetime="D20220513T104817" name="Water XAT" problem="0" value="0"/>
+  <state datetime="D20220513T104817" name="Door 1 XAT" problem="0" value="0"/>
+  <state datetime="D20220513T104817" name="Door 2 XAT" problem="0" value="0"/>
+  <state datetime="D20220513T104817" name="Loop XAT" problem="0" value="1"/>
+ </station>
+</server>

@@ -105,7 +105,7 @@ sidebar_top = html.Div(
         dbc.Tabs(id="tabs-connection",
                  children=[
                      dbc.Tab(label='Server', tab_id='server'),
-                     dbc.Tab(label='SDS Folder', tab_id='folder', disabled=False),
+                     dbc.Tab(label='SDS Folder', tab_id='folder', disabled=True),
                      dbc.Tab(label='File', tab_id='file', disabled=True),
                  ],
                  active_tab='server'),
@@ -147,7 +147,7 @@ def render_connection(tab):
     if tab == 'server':
         return [
             html.Div(dbc.Input(id='input-on-submit', placeholder='URL:port', type="text", className="mb-1"),
-                     style={'display': 'inline-block', 'width': '69%', 'textarea:color': 'white'}),
+                     style={'display': 'inline-block', 'width': '69%', 'textarea:color': 'black'}),
             html.Div(children=' ', style={'display': 'inline-block', 'width': '2%'}),
             html.Div(dbc.Button("Connect", id="connect-server-button", className="mr-1"),
                      style={'display': 'inline-block', 'width': '29%'}),
@@ -173,10 +173,11 @@ def render_connection(tab):
             html.Br(),
             html.H4('Time graphs stations'),
             html.Div(id='container-button-basic',
+                     style={'textarea:color': 'black'},
                      children=[
                              dcc.Dropdown(id='network-list-active',
                                              placeholder='Select stations for time graphs',
-                                             options=network_list, multi=True, style={'color': 'black'}),
+                                             options=network_list, multi=True),
                              html.P('Connection not active', style={'color': 'red'})
                              ]
                      ),
@@ -569,6 +570,7 @@ def update_states(station_name, n_intervals, tab):
             with open(f'log/{tab}/states_soh.xml', 'r', encoding='utf-8') as fp:
                 content = fp.read()
                 bs_states = BS(content, 'lxml-xml')
+            print(station_name)
             bs_station = bs_states.find('station', {'name': station_name})
             for state in bs_station.find_all('state'):
                 states.append([state.get('name'), state.get('value'), int(state.get('problem'))])
@@ -1191,10 +1193,10 @@ app.layout = dbc.Container(dbc.Row([dcc.Location(id="url"), sidebar, graph], sty
 
 
 if __name__ == '__main__':
-    if DEBUG is not True:
-        webbrowser.open(SERVER_DASH_PROTOCOL + SERVER_DASH_IP + ':' + str(SERVER_DASH_PORT))
-    else:
-        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
+#    if DEBUG is not True:
+#        webbrowser.open(SERVER_DASH_PROTOCOL + SERVER_DASH_IP + ':' + str(SERVER_DASH_PORT))
+#    else:
+#        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
 
     init_oracle_client(CLIENT_ORACLE)
     client_oracle_xat = HatOracleClient()

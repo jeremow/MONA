@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<server ip="192.168.1.78" port="1521">
+ <station name="U01">
+  <state datetime="D20210108T113000" name="Used Disk size" problem="0" value="90272"/>
+  <state datetime="D20210108T113000" name="Available Disk size" problem="0" value="3916448"/>
+  <state datetime="D20210108T113000" name="Total Disk size" problem="0" value="4006720"/>
+ </station>
+ <station name="BANB">
+  <state datetime="D20211111T003000" name="E Mass position" problem="0" value="-1"/>
+  <state datetime="D20211111T003000" name="N Mass position" problem="0" value="-4"/>
+  <state datetime="D20211111T003000" name="Z Mass position" problem="0" value="-8"/>
+  <state datetime="D20211111T004500" name="Battery voltage station" problem="0" value="11.8"/>
+  <state datetime="D20211111T004500" name="Temperature" problem="0" value="17"/>
+ </station>
+</server>

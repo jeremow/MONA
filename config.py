@@ -4,7 +4,7 @@ import pandas as pd
 
 VERBOSE: int = 0
 
-SERVER_DASH_IP: str = "127.0.0.1"
+SERVER_DASH_IP: str = "192.168.1.74"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"
 DEBUG: bool = False

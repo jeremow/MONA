@@ -1,3 +1,7 @@
 @ECHO OFF
-cmd /k "cd /d C:\Users\Administrateur\Documents\Python\dash\venv\Scripts & activate & cd /d C:\Users\Administrateur\Documents\Python\dash & python app.py"
+
+:a
+cmd /k "cd /d C:\Program Files (x86)\MONA_LISA\venv\Scripts & activate & cd /d C:\Program Files (x86)\MONA_LISA & python app.py"
+
 PAUSE
+goto a
