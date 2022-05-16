@@ -130,7 +130,7 @@ def change_btn(n_clicks):
     :param n_clicks:
     :return:
     """
-    if n_clicks % 2 == 0:
+    if n_clicks % 2 == 1:
         return 'danger', 'Alarm sound: OFF'
     else:
         return 'success', 'Alarm sound: ON'
