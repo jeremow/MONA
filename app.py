@@ -552,10 +552,11 @@ def update_list_station(n_clicks):
 
 
 @app.callback(Output('health-states', 'children'),
+              Input('station-list-one-choice', 'value'),
               Input('interval-states', 'n_intervals'),
               State('tabs-connection', 'active_tab'),
               prevent_initial_call=True)
-def update_states(n_intervals, tab):
+def update_states(station_name, n_intervals, tab):
     """
     Callback to update the health state on the left side.
     :param station_name: choose the name of the station to display info
