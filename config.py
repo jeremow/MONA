@@ -7,7 +7,7 @@ VERBOSE: int = 0
 SERVER_DASH_IP: str = "localhost"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"
-DEBUG: bool = False
+DEBUG: bool = True
 
 # AREA AND STATIONS
 NAME_AREA: str = "UB (France)"

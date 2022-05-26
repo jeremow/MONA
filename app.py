@@ -82,7 +82,7 @@ encoded_logo = base64.b64encode(open(logo_filename, 'rb').read())
 sidebar_top = html.Div(
     [
         # Picture and title
-        html.H2([html.Img(src='data:image/jpg;base64,{}'.format(encoded_logo.decode()), height=80), " MONA-JH"], className="display-5"),
+        html.H3([html.Img(src='data:image/jpg;base64,{}'.format(encoded_logo.decode()), height=80), " MONA-JH"]),
         html.P(
             [
                 "Monitoring App of the IAG - " + NAME_AREA
@@ -518,6 +518,7 @@ sidebar_bottom = html.Div(
         html.Div(id='station-list-div', children=dcc.Dropdown(id='station-list-one-choice',
                                                               placeholder='Select a station', options=network_list,
                                                               multi=False, style={'color': 'black'})),
+        html.Div(id='health-states', children=[])
 
     ],
     # style=CHILD,
@@ -793,7 +794,7 @@ def update_data(tab, network_list_active, submit_value):
 
 graph_bottom = html.Div(
     [
-        html.H5("State of Health", className="display-5"),
+        html.H3("State of Health"),
         dbc.Tabs(id="tabs-styled-with-inline",
                  children=[
                      dbc.Tab(label='Map', tab_id='map'),
@@ -893,12 +894,17 @@ def update_alarms(tab, n_intervals, type_connection, sta):
             if bs_station is not None:
                 for state in bs_station.find_all('state'):
                     state_dt = state.get('datetime')
-                    state_datetime = state_dt[1:5] + '-' + state_dt[5:7] + '-' + \
-                                     state_dt[7:9] + ' ' + state_dt[10:12] + ':' + \
-                                     state_dt[12:14] + ':' + state_dt[14:]
+                    if len(state_dt) == 0:
+                        state_datetime = html.B(state.get("name"))
+                        state_name = ''
+                    else:
+                        state_datetime = state_dt[1:5] + '-' + state_dt[5:7] + '-' + \
+                                         state_dt[7:9] + ' ' + state_dt[10:12] + ':' + \
+                                         state_dt[12:14] + ':' + state_dt[14:]
+                        state_name = state.get("name")
                     states_table.append(html.Tr(
                         [html.Td(state_datetime),
-                         html.Td(state.get('name')),
+                         html.Td(state_name),
                          html.Td(state.get('value'))
                          ]
                     ))

@@ -44,6 +44,7 @@ class OracleClient:
         try:
             states_data = f"<server ip='{HOST_ORACLE}' port='{PORT_ORACLE}'>"
             for sta in self.stations:
+
                 states_data += f"<station name='{sta}'>"
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_XAT} WHERE '
                                     f'STATION_NAME=:sta AND IS_DATA=:data ORDER BY TIME DESC',
