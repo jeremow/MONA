@@ -90,10 +90,14 @@ def delete_residual_data(delete_streams=True):
                 pass
             else:
                 os.remove(BUFFER_DIR+'/'+file)
+        os.remove(BUFFER_DIR + '/streams.data')
     except PermissionError:
         pass
     except FileNotFoundError:
-        os.mkdir(BUFFER_DIR)
+        try:
+            os.mkdir(BUFFER_DIR)
+        except FileExistsError:
+            pass
 
 
 if __name__ == '__main__':

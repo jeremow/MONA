@@ -1,11 +1,10 @@
 import cx_Oracle
 from config import *
-import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup as bs
-from utils import format_date_to_str, format_states_dt, base10_to_base2_str
+from utils import format_states_dt, base10_to_base2_str
 
 
-class HatOracleClient:
+class OracleClient:
     """
     The HatOracleClient object connect to the Oracle Client for the health states (also named HAT in mongolian).
     It initializes with the cx_Oracle library.
@@ -14,14 +13,21 @@ class HatOracleClient:
     """
     def __init__(self):
 
-        self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_XAT, PORT_ORACLE_XAT, service_name=SERVICE_ORACLE_XAT)
+        self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE, PORT_ORACLE, service_name=SERVICE_ORACLE)
         try:
-            self.conn = cx_Oracle.connect(user=USER_ORACLE_XAT, password=PWD_ORACLE_XAT, dsn=self.dsn_tns)
+            self.conn = cx_Oracle.connect(user=USER_ORACLE, password=PWD_ORACLE, dsn=self.dsn_tns)
             self.cursor = self.conn.cursor()
             self.stations = []
             self.cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE_XAT} GROUP BY STATION_NAME')
             for row in self.cursor:
                 self.stations.append(row[0])
+
+            for TABLE in TABLE_ORACLE_SOH:
+                self.cursor.execute(f'SELECT STATION FROM {TABLE} GROUP BY STATION')
+                for row in self.cursor:
+                    sta = row[0]
+                    if sta not in self.stations:
+                        self.stations.append(sta)
         except cx_Oracle.ProgrammingError:
             print('Connection error for HatOracleClient')
         except cx_Oracle.DatabaseError:
@@ -36,7 +42,7 @@ class HatOracleClient:
         :return: Nothing
         """
         try:
-            states_data = f"<server ip='{HOST_ORACLE_XAT}' port='{PORT_ORACLE_XAT}'>"
+            states_data = f"<server ip='{HOST_ORACLE}' port='{PORT_ORACLE}'>"
             for sta in self.stations:
                 states_data += f"<station name='{sta}'>"
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_XAT} WHERE '
@@ -87,6 +93,7 @@ class HatOracleClient:
                     dt = format_states_dt(timestamp)
 
                     states_data += f"""
+                    <state name='XAT TABLE' datetime='' value='' problem='' />
                     <state name='Temperature Station vault' datetime='{dt}' value='{vault0_temperature}°C' problem='0' /> 
                     <state name='Humidity Station vault' datetime='{dt}' value='{vault0_humidity}%' problem='0'/> 
                     <state name='Temperature Second vault' datetime='{dt}' value='{vault1_temperature}°C' problem='0'/> 
@@ -110,8 +117,61 @@ class HatOracleClient:
                     <state name='Loop XAT' datetime='{dt}' value='{sensor1_value[5]}' problem='0'/>
                     """
 
-                    states_data += f"</station>"
                     break  # to leave the current cursor after getting the last value
+
+                self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[0]} WHERE STATION=:sta ORDER BY DATE1 DESC',
+                                    sta=sta)
+                for row in self.cursor:
+                    timestamp = row[1]
+                    used_disksize = row[2]
+                    available_disksize = row[3]
+                    total_disksize = row[4]
+
+                    dt = format_states_dt(timestamp)
+
+                    states_data += f"""
+                                    <state name='DISK USAGE TABLE' datetime='' value='' problem='' />
+                                    <state name='Used Disk size' datetime='{dt}' value='{used_disksize}' problem='0' /> 
+                                    <state name='Available Disk size' datetime='{dt}' value='{available_disksize}' problem='0' /> 
+                                    <state name='Total Disk size' datetime='{dt}' value='{total_disksize}' problem='0' /> 
+                                    """
+                    break  # to leave the current cursor after getting the last value
+
+                self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[1]} WHERE STATION=:sta ORDER BY DATE1 DESC',
+                                    sta=sta)
+                for row in self.cursor:
+                    timestamp = row[1]
+                    e_massposition = row[2]
+                    n_massposition = row[3]
+                    z_massposition = row[4]
+
+                    dt = format_states_dt(timestamp)
+
+                    states_data += f"""
+                                    <state name='MASS POSITION TABLE' datetime='' value='' problem='' />
+                                    <state name='E Mass position' datetime='{dt}' value='{e_massposition}' problem='0' /> 
+                                    <state name='N Mass position' datetime='{dt}' value='{n_massposition}' problem='0' /> 
+                                    <state name='Z Mass position' datetime='{dt}' value='{z_massposition}' problem='0' /> 
+                                    """
+                    break  # to leave the current cursor after getting the last value
+
+                self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[2]} WHERE STATION=:sta ORDER BY DATE1 DESC',
+                                    sta=sta)
+                for row in self.cursor:
+                    timestamp = row[3]
+                    battery_voltage = row[1]
+                    temperature = row[2]
+
+                    dt = format_states_dt(timestamp)
+
+                    states_data += f"""
+                                    <state name='BATTERY VOLTAGE TABLE' datetime='' value='' problem='' />
+                                    <state name='Battery voltage station' datetime='{dt}' value='{battery_voltage}' problem='0' /> 
+                                    <state name='Temperature' datetime='{dt}' value='{temperature}' problem='0' /> 
+                                    """
+                    break
+
+                states_data += f"</station>"
 
                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_XAT} WHERE '
                                     f'STATION_NAME=:sta AND IS_DATA=:data ORDER BY TIME DESC',
@@ -128,7 +188,7 @@ class HatOracleClient:
 
             soup = bs(states_data, 'lxml-xml')
 
-            with open('log/server/states_xat.xml', 'w', encoding='utf-8') as fp:
+            with open('log/server/states.xml', 'w', encoding='utf-8') as fp:
                 fp.write(soup.prettify())
 
         except cx_Oracle.DatabaseError:
@@ -238,116 +298,116 @@ class HatOracleClient:
         self.cursor.close()
         self.conn.close()
 
-
-class SOHOracleClient:
-    """
-    The SOHOracleClient object connect to the Oracle Client for the health states (also named SOH).
-    It initializes with the cx_Oracle library.
-    It took out of the config.py file the CLIENT_ORACLE_SOH, HOST_ORACLE_SOH and PORT_ORACLE_SOH. Please verify the
-    configuration before using it.
-    """
-    def __init__(self):
-        self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_SOH, PORT_ORACLE_SOH, service_name=SERVICE_ORACLE_SOH)
-        try:
-            self.conn = cx_Oracle.connect(user=USER_ORACLE_SOH, password=PWD_ORACLE_SOH, dsn=self.dsn_tns)
-            self.cursor = self.conn.cursor()
-
-            self.stations = []
-            for TABLE in TABLE_ORACLE_SOH:
-                self.cursor.execute(f'SELECT STATION FROM {TABLE} GROUP BY STATION')
-                for row in self.cursor:
-                    sta = row[0]
-                    if sta not in self.stations:
-                        self.stations.append(sta)
-        except cx_Oracle.ProgrammingError:
-            print('Connection error for SOHOracleClient')
-        except cx_Oracle.DatabaseError:
-            print('Connection error for SOHOracleClient')
-        self.problem = []
-
-    def write_state_health(self):
-        """
-        Pick the information needed in the Oracle Database and write it in the file log/server/states_soh.xml.
-        The XML file will be read by main app MONA-LISA to create the table of HAT/SOH.
-
-        There are 5 basics parameters at first, but inside of this method, you'll find how to add more for your needs.
-        :return: Nothing
-        """
-        try:
-
-            states_data = f"<server ip='{HOST_ORACLE_SOH}' port='{PORT_ORACLE_SOH}'>"
-
-            for sta in self.stations:
-                states_data += f"<station name='{sta}'>"
-
-                self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[0]} WHERE STATION=:sta ORDER BY DATE1 DESC',
-                                    sta=sta)
-                for row in self.cursor:
-                    timestamp = row[1]
-                    used_disksize = row[2]
-                    available_disksize = row[3]
-                    total_disksize = row[4]
-
-                    dt = format_states_dt(timestamp)
-
-                    states_data += f"""
-                    <state name='Used Disk size' datetime='{dt}' value='{used_disksize}' problem='0' /> 
-                    <state name='Available Disk size' datetime='{dt}' value='{available_disksize}' problem='0' /> 
-                    <state name='Total Disk size' datetime='{dt}' value='{total_disksize}' problem='0' /> 
-                    """
-                    break  # to leave the current cursor after getting the last value
-
-                self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[1]} WHERE STATION=:sta ORDER BY DATE1 DESC',
-                                    sta=sta)
-                for row in self.cursor:
-                    timestamp = row[1]
-                    e_massposition = row[2]
-                    n_massposition = row[3]
-                    z_massposition = row[4]
-
-                    dt = format_states_dt(timestamp)
-
-                    states_data += f"""
-                    <state name='E Mass position' datetime='{dt}' value='{e_massposition}' problem='0' /> 
-                    <state name='N Mass position' datetime='{dt}' value='{n_massposition}' problem='0' /> 
-                    <state name='Z Mass position' datetime='{dt}' value='{z_massposition}' problem='0' /> 
-                    """
-                    break  # to leave the current cursor after getting the last value
-
-                self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[2]} WHERE STATION=:sta ORDER BY DATE1 DESC',
-                                    sta=sta)
-                for row in self.cursor:
-                    timestamp = row[3]
-                    battery_voltage = row[1]
-                    temperature = row[2]
-
-                    dt = format_states_dt(timestamp)
-
-                    states_data += f"""
-                    <state name='Battery voltage station' datetime='{dt}' value='{battery_voltage}' problem='0' /> 
-                    <state name='Temperature' datetime='{dt}' value='{temperature}' problem='0' /> 
-                    """
-                    break
-
-                states_data += f"</station>"
-            states_data += f"</server>"
-
-            soup = bs(states_data, 'lxml-xml')
-
-            with open('log/server/states_soh.xml', 'w', encoding='utf-8') as fp:
-                fp.write(soup.prettify())
-
-        except cx_Oracle.DatabaseError:
-            print('Request is false')
-        except FileNotFoundError:
-            print('No states file found')
-
-    def verify_states(self, **parameters):
-        pass
-
-    def close(self):
-        self.cursor.close()
-        self.conn.close()
+#
+# class SOHOracleClient:
+#     """
+#     The SOHOracleClient object connect to the Oracle Client for the health states (also named SOH).
+#     It initializes with the cx_Oracle library.
+#     It took out of the config.py file the CLIENT_ORACLE_SOH, HOST_ORACLE_SOH and PORT_ORACLE_SOH. Please verify the
+#     configuration before using it.
+#     """
+#     def __init__(self):
+#         self.dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_SOH, PORT_ORACLE_SOH, service_name=SERVICE_ORACLE_SOH)
+#         try:
+#             self.conn = cx_Oracle.connect(user=USER_ORACLE_SOH, password=PWD_ORACLE_SOH, dsn=self.dsn_tns)
+#             self.cursor = self.conn.cursor()
+#
+#             self.stations = []
+#             for TABLE in TABLE_ORACLE_SOH:
+#                 self.cursor.execute(f'SELECT STATION FROM {TABLE} GROUP BY STATION')
+#                 for row in self.cursor:
+#                     sta = row[0]
+#                     if sta not in self.stations:
+#                         self.stations.append(sta)
+#         except cx_Oracle.ProgrammingError:
+#             print('Connection error for SOHOracleClient')
+#         except cx_Oracle.DatabaseError:
+#             print('Connection error for SOHOracleClient')
+#         self.problem = []
+#
+#     def write_state_health(self):
+#         """
+#         Pick the information needed in the Oracle Database and write it in the file log/server/states_soh.xml.
+#         The XML file will be read by main app MONA-LISA to create the table of HAT/SOH.
+#
+#         There are 5 basics parameters at first, but inside of this method, you'll find how to add more for your needs.
+#         :return: Nothing
+#         """
+#         try:
+#
+#             states_data = f"<server ip='{HOST_ORACLE_SOH}' port='{PORT_ORACLE_SOH}'>"
+#
+#             for sta in self.stations:
+#                 states_data += f"<station name='{sta}'>"
+#
+#                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[0]} WHERE STATION=:sta ORDER BY DATE1 DESC',
+#                                     sta=sta)
+#                 for row in self.cursor:
+#                     timestamp = row[1]
+#                     used_disksize = row[2]
+#                     available_disksize = row[3]
+#                     total_disksize = row[4]
+#
+#                     dt = format_states_dt(timestamp)
+#
+#                     states_data += f"""
+#                     <state name='Used Disk size' datetime='{dt}' value='{used_disksize}' problem='0' />
+#                     <state name='Available Disk size' datetime='{dt}' value='{available_disksize}' problem='0' />
+#                     <state name='Total Disk size' datetime='{dt}' value='{total_disksize}' problem='0' />
+#                     """
+#                     break  # to leave the current cursor after getting the last value
+#
+#                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[1]} WHERE STATION=:sta ORDER BY DATE1 DESC',
+#                                     sta=sta)
+#                 for row in self.cursor:
+#                     timestamp = row[1]
+#                     e_massposition = row[2]
+#                     n_massposition = row[3]
+#                     z_massposition = row[4]
+#
+#                     dt = format_states_dt(timestamp)
+#
+#                     states_data += f"""
+#                     <state name='E Mass position' datetime='{dt}' value='{e_massposition}' problem='0' />
+#                     <state name='N Mass position' datetime='{dt}' value='{n_massposition}' problem='0' />
+#                     <state name='Z Mass position' datetime='{dt}' value='{z_massposition}' problem='0' />
+#                     """
+#                     break  # to leave the current cursor after getting the last value
+#
+#                 self.cursor.execute(f'SELECT * FROM {TABLE_ORACLE_SOH[2]} WHERE STATION=:sta ORDER BY DATE1 DESC',
+#                                     sta=sta)
+#                 for row in self.cursor:
+#                     timestamp = row[3]
+#                     battery_voltage = row[1]
+#                     temperature = row[2]
+#
+#                     dt = format_states_dt(timestamp)
+#
+#                     states_data += f"""
+#                     <state name='Battery voltage station' datetime='{dt}' value='{battery_voltage}' problem='0' />
+#                     <state name='Temperature' datetime='{dt}' value='{temperature}' problem='0' />
+#                     """
+#                     break
+#
+#                 states_data += f"</station>"
+#             states_data += f"</server>"
+#
+#             soup = bs(states_data, 'lxml-xml')
+#
+#             with open('log/server/states_soh.xml', 'w', encoding='utf-8') as fp:
+#                 fp.write(soup.prettify())
+#
+#         except cx_Oracle.DatabaseError:
+#             print('Request is false')
+#         except FileNotFoundError:
+#             print('No states file found')
+#
+#     def verify_states(self, **parameters):
+#         pass
+#
+#     def close(self):
+#         self.cursor.close()
+#         self.conn.close()
 
 
 def init_oracle_client(path_to_client):
@@ -362,8 +422,8 @@ def init_oracle_client(path_to_client):
 
 if __name__ == '__main__':
     cx_Oracle.init_oracle_client(CLIENT_ORACLE)
-    dsn_tns = cx_Oracle.makedsn(HOST_ORACLE_XAT, PORT_ORACLE_XAT, service_name=SERVICE_ORACLE_XAT)
-    conn = cx_Oracle.connect(user=USER_ORACLE_XAT, password=PWD_ORACLE_XAT, dsn=dsn_tns)
+    dsn_tns = cx_Oracle.makedsn(HOST_ORACLE, PORT_ORACLE, service_name=SERVICE_ORACLE)
+    conn = cx_Oracle.connect(user=USER_ORACLE, password=PWD_ORACLE, dsn=dsn_tns)
     cursor = conn.cursor()
     stations = []
     cursor.execute(f'SELECT STATION_NAME FROM {TABLE_ORACLE_XAT} GROUP BY STATION_NAME')

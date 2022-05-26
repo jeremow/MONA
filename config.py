@@ -4,7 +4,7 @@ import pandas as pd
 
 VERBOSE: int = 0
 
-SERVER_DASH_IP: str = "192.168.1.76"
+SERVER_DASH_IP: str = "localhost"
 SERVER_DASH_PORT: int = 8050
 SERVER_DASH_PROTOCOL: str = "http://"
 DEBUG: bool = False
@@ -51,13 +51,17 @@ BUFFER_DIR: str = 'data'
 # ORACLE CLIENT
 CLIENT_ORACLE: str = r'/u01/app/oracle/product/19.3.0/dbhome_1/lib'
 
-# HAT ORACLE CLIENT
-HOST_ORACLE_XAT: str = '192.168.1.76'
-PORT_ORACLE_XAT: str = '1522'
-SERVICE_ORACLE_XAT: str = 'hatdb2'
-USER_ORACLE_XAT: str = r'hat'
-PWD_ORACLE_XAT: str = 'mndc_iag'
+# ORACLE CLIENT
+HOST_ORACLE: str = '192.168.1.76'
+PORT_ORACLE: str = '1522'
+SERVICE_ORACLE: str = 'hatdb2'
+USER_ORACLE: str = r'hat'
+PWD_ORACLE: str = 'mndc_iag'
+
+# for TABLE_ORACLE_XAT and TABLE_ORACLE_SOH, you have to be careful about the class OracleClient in the method
+# verify_states if the names are still matching with your database columns
 TABLE_ORACLE_XAT: str = 'hatv4'
+TABLE_ORACLE_SOH: list = ['DISKSIZE1', 'MASS_POSITION', 'BATTERYVOLTAGE']
 
 # ALARM XAT
 XAT_ALARM_NAME: list = ['Loop', 'Water', 'Door 1', 'Door 2']
@@ -67,16 +71,17 @@ XAT_NORMAL_STATE: dict = {
     'CCBM': '1000',
 }
 
-# SOH ORACLE CLIENT
-HOST_ORACLE_SOH: str = '192.168.1.78'
-PORT_ORACLE_SOH: str = '1521'
-SERVICE_ORACLE_SOH: str = 'xe'
-USER_ORACLE_SOH: str = r'sohdata'
-PWD_ORACLE_SOH: str = 'tdb'
-TABLE_ORACLE_SOH: list = ['DISKSIZE1', 'MASS_POSITION', 'BATTERYVOLTAGE']
+# # SOH ORACLE CLIENT: the two databases are now on the same OracleClient, deprecated
+# HOST_ORACLE_SOH: str = '192.168.1.78'
+# PORT_ORACLE_SOH: str = '1521'
+# SERVICE_ORACLE_SOH: str = 'xe'
+# USER_ORACLE_SOH: str = r'sohdata'
+# PWD_ORACLE_SOH: str = 'tdb'
+# TABLE_ORACLE_SOH: list = ['DISKSIZE1', 'MASS_POSITION', 'BATTERYVOLTAGE']
 
 # SEISMIC CONFIG
 XML_INVENTORY: str = ""
 
 # DATA PROCESSING
 SAMPLING_RATE: float = 25.0
+QUEUE_DURATION: int = 180

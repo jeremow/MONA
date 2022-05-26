@@ -9,8 +9,8 @@
 #
 # Separated on different files:
 # - app.py with the main interface and algorithm
-# - retrieve_data.py for the real-time data from SeedLink server
-# - state_health.py for the Oracle Client of the HAT database of the IAG
+# - mona_sl_client.py for the real-time data from SeedLink server
+# - state_health.py for the Oracle Client of the HAT/SOH database of the IAG
 
 import base64
 import gc
@@ -39,17 +39,14 @@ from bs4 import BeautifulSoup as BS
 
 # sidebar connection
 from connection import *
-from retrieve_data import EasySLC, SLThread
-from subprocess import Popen
+from mona_sl_client import MonaSeedLinkClient
 
 # for alarms
 import simpleaudio as sa
 from simpleaudio._simpleaudio import SimpleaudioError
-# from alarms import create_alarm_from_HAT
 
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA - Updating Data",
-                )
+app = dash.Dash(__name__, suppress_callback_exceptions=True, update_title="MONA - Updating Data")
 
 app.css.config.serve_locally = True
 app.scripts.config.serve_locally = True
@@ -60,10 +57,12 @@ server = app.server
 # problems between some callbacks.
 
 try:
-    del time_graphs_names, time_graphs, fig_list, network_list, network_list_values, interval_time_graphs, client, \
-        client_oracle_xat, client_oracle_soh
+    del client_oracle
 except NameError:
     pass
+
+# Remove all the data residual files if they exist
+delete_residual_data()
 
 time_graphs_names = []
 time_graphs = []
@@ -71,14 +70,8 @@ fig_list = []
 network_list = []
 network_list_values = []
 interval_time_graphs = []
-client = None
-client_thread = None
 init_oracle_client(CLIENT_ORACLE)
-client_oracle_xat = HatOracleClient()
-client_oracle_soh = SOHOracleClient()
-
-# Remove all the data residual files if they exist
-delete_residual_data()
+client_oracle = OracleClient()
 
 # logo file and decoding to display in browser
 logo_filename = 'assets/logo.jpg'
@@ -275,26 +268,26 @@ def render_connection(tab):
               Input('realtime-radiobox', 'value'),
               Input('tabs-connection', 'active_tab'))
 def display_data_retrieval(value, tab):
-    global client
-    global client_thread
+    # global client
+    # global client_thread
     if value == 'realtime':
         if tab == 'server':
             delete_residual_data(delete_streams=False)
-            try:
-                client.data_retrieval = False
-                client_thread.close()
-                client_thread = SLThread('Client SL Realtime', client)
-                client_thread.start()
-            except AttributeError:
-                pass
+            # try:
+            #     client.data_retrieval = False
+            #     client_thread.close()
+            #     client_thread = SLThread('Client SL Realtime', client)
+            #     client_thread.start()
+            # except AttributeError:
+            #     pass
         return []
     else:
-        if tab == 'server':
-            try:
-                client.data_retrieval = True
-                client_thread.close()
-            except AttributeError:
-                pass
+        # if tab == 'server':
+        #     # try:
+        #     #     client.data_retrieval = True
+        #     #     client_thread.close()
+        #     # except AttributeError:
+        #     #     pass
 
         return [dcc.DatePickerSingle(id='date-picker-dcc', date=UTCDateTime().date,
                                      display_format='YYYY/MM/DD', number_of_months_shown=2,
@@ -338,8 +331,8 @@ def display_data_retrieval(value, tab):
 )
 def get_data_from_retrieval(n_clicks, date, hour, min, sec, period_value, period, tab):
     if tab == 'server':
-        global client
-        global client_thread
+        # global client
+        # global client_thread
         if n_clicks > 0:
             delete_residual_data(delete_streams=False)
             try:
@@ -383,8 +376,8 @@ def connect_update_server(n_clicks, value, tab):
     :return:
     """
 
-    global client
-    global client_thread
+    # global client
+    # global client_thread
     global network_list
     global network_list_values
     network_list = []
@@ -393,20 +386,57 @@ def connect_update_server(n_clicks, value, tab):
     if tab == 'server':
         if value is not None:
             try:
-                pass
-                client = EasySLC(value, network_list, network_list_values)
-                # client = SeedLinkClient(value, network_list, network_list_values)
-            except SeedLinkException:
-                client.connected = 0
+                server_info = value.split(':')
+                if len(server_info) == 1:
+                    server_hostname = server_info[0]
+                    server_port = 18000
+                else:
+                    server_hostname = server_info[0]
+                    server_port = server_info[1]
 
-            if client.connected == 1:
-                try:
-                    client_thread.close()
-                except AttributeError:
-                    pass
-                if client.data_retrieval is False:
-                    client_thread = SLThread('Client SL Realtime', client)
-                    client_thread.start()
+                connected = get_network_list('server', network_list, network_list_values,
+                                 server_hostname=server_hostname, server_port=server_port)
+                # client = EasySLC(value, network_list, network_list_values)
+
+            except SeedLinkException:
+                connected = 0
+                # client.connected = 0
+
+            # if client.connected == 1:
+            #     try:
+            #         client_thread.close()
+            #     except AttributeError:
+            #         pass
+            #     if client.data_retrieval is False:
+            #         client_thread = SLThread('Client SL Realtime', client)
+            #         client_thread.start()
+            #     return [
+            #         dcc.Dropdown(id='network-list-active',
+            #                      placeholder='Select stations for time graphs',
+            #                      options=network_list, multi=True, style={'color': 'black'}),
+            #         html.P('Connection active to {}'.format(value), style={'color': 'green'}),
+            #         dcc.Interval(
+            #             id='interval-data',
+            #             interval=UPDATE_DATA,  # in milliseconds
+            #             n_intervals=0,
+            #             disabled=False),
+            #     ]
+            # elif client.connected == -1:
+            #     return [
+            #         dcc.Dropdown(id='network-list-active',
+            #                      placeholder='Select stations for time graphs',
+            #                      options=network_list, multi=True, style={'color': 'black'}),
+            #         html.P('Config file of server missing.', style={'color': 'red'}),
+            #     ]
+            # else:
+            #     return [
+            #         dcc.Dropdown(id='network-list-active',
+            #                      placeholder='Select stations for time graphs',
+            #                      options=network_list, multi=True, style={'color': 'black'}),
+            #         html.P('Verify the config file, no station found.', style={'color': 'red'}),
+            #     ]
+            if connected == 1:
+
                 return [
                     dcc.Dropdown(id='network-list-active',
                                  placeholder='Select stations for time graphs',
@@ -418,7 +448,7 @@ def connect_update_server(n_clicks, value, tab):
                         n_intervals=0,
                         disabled=False),
                 ]
-            elif client.connected == -1:
+            elif connected == -1:
                 return [
                     dcc.Dropdown(id='network-list-active',
                                  placeholder='Select stations for time graphs',
@@ -489,10 +519,6 @@ sidebar_bottom = html.Div(
                                                               placeholder='Select a station', options=network_list,
                                                               multi=False, style={'color': 'black'})),
 
-        html.Div(id='health-states',
-                 children=dbc.Table()
-                 )
-
     ],
     # style=CHILD,
 )
@@ -509,101 +535,92 @@ def update_list_station(n_clicks):
     :param n_clicks:
     :return Dropdown to select the stations available:
     """
-    global client_oracle_xat
-    global client_oracle_soh
+    global client_oracle
     stations = []
     stations_names = []
+    try:
+        for sta in client_oracle.stations:
+            stations.append({'label': sta, 'value': sta})
+            stations_names.append(sta)
 
-    for sta in client_oracle_xat.stations:
-        stations.append({'label': sta, 'value': sta})
-        stations_names.append(sta)
-    for sta in client_oracle_soh.stations:
-        stations.append({'label': sta, 'value': sta})
-        stations_names.append(sta)
-
-    print(f"{len(stations_names)} stations found for XAT/SOH: {stations_names}")
+        print(f"{len(stations_names)} stations found for State of Health: {stations_names}")
+    except AttributeError:
+        print('No station found for OracleClient.')
 
     return [dcc.Dropdown(id='station-list-one-choice', placeholder='Select a station',
                          options=stations, multi=False, style={'color': 'black'})]
 
 
-@app.callback(Output('health-states', 'children'),
-              Input('station-list-one-choice', 'value'),
-              Input('interval-states', 'n_intervals'),
-              State('tabs-connection', 'active_tab'),
-              prevent_initial_call=True)
-def update_states(station_name, n_intervals, tab):
-    """
-    Callback to update the health state on the left side.
-    :param station_name: choose the name of the station to display info
-    :param n_intervals: update every n_intervals the table.
-    :return:
-    """
-    states = []
-    states_list = []
-    global client_oracle_xat
-    global client_oracle_soh
-
-    try:
-        client_oracle_xat.write_state_health()
-        client_oracle_soh.write_state_health()
-    except cx_Oracle.ProgrammingError:
-        print('Connection error for HatOracleClient')
-    except cx_Oracle.DatabaseError:
-        print('Connection error for HatOracleClient')
-    except AttributeError:
-        print('Connection not available for new data.')
-
-    if station_name is not None:
-        try:
-            with open(f'log/{tab}/states_xat.xml', 'r', encoding='utf-8') as fp:
-                content = fp.read()
-                bs_states = BS(content, 'lxml-xml')
-            bs_station = bs_states.find('station', {'name': station_name})
-            for state in bs_station.find_all('state'):
-                states.append([state.get('name'), state.get('value'), int(state.get('problem'))])
-
-        except FileNotFoundError:
-            pass
-        except AttributeError:
-            pass
-
-        try:
-            with open(f'log/{tab}/states_soh.xml', 'r', encoding='utf-8') as fp:
-                content = fp.read()
-                bs_states = BS(content, 'lxml-xml')
-            print(station_name)
-            bs_station = bs_states.find('station', {'name': station_name})
-            for state in bs_station.find_all('state'):
-                states.append([state.get('name'), state.get('value'), int(state.get('problem'))])
-
-        except FileNotFoundError:
-            pass
-        except AttributeError:
-            pass
-
-        # for state in states:
-        #     if state[2] == 0:
-        #         text_badge = "OK"
-        #         color = "success"
-        #     elif state[2] == 1:
-        #         text_badge = "Warning"
-        #         color = "warning"
-        #     elif state[2] == 2:
-        #         text_badge = "Critic"
-        #         color = "danger"
-        #     else:
-        #         text_badge = "N/A"
-        #         color = "secondary"
-        #
-        #     table_inside.append(html.Tr(
-        #         [html.Td(state[0]),
-        #          html.Td(state[1]),
-        #          html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))
-        #          ]
-        #     ))
-
-    return html.Div(id='health-states', children=states_list)
+# @app.callback(Output('health-states', 'children'),
+#               Input('station-list-one-choice', 'value'),
+#               Input('interval-states', 'n_intervals'),
+#               State('tabs-connection', 'active_tab'),
+#               prevent_initial_call=True)
+# def update_states(station_name, n_intervals, tab):
+#     """
+#     Callback to update the health state on the left side.
+#     :param station_name: choose the name of the station to display info
+#     :param n_intervals: update every n_intervals the table.
+#     :return:
+#     """
+#     states = []
+#     states_list = []
+#     global client_oracle
+#
+#     try:
+#         client_oracle.write_state_health()
+#     except cx_Oracle.ProgrammingError:
+#         print('Connection error for OracleClient')
+#     except cx_Oracle.DatabaseError:
+#         print('Connection error for OracleClient')
+#     except AttributeError:
+#         print('Connection not available for new data.')
+#
+#     if station_name is not None:
+#         try:
+#             with open(f'log/{tab}/states.xml', 'r', encoding='utf-8') as fp:
+#                 content = fp.read()
+#                 bs_states = BS(content, 'lxml-xml')
+#             bs_station = bs_states.find('station', {'name': station_name})
+#             for state in bs_station.find_all('state'):
+#                 states.append([state.get('name'), state.get('value'), int(state.get('problem'))])
+#
+#         except FileNotFoundError:
+#             pass
+#         except AttributeError:
+#             pass
+#
+#
+#         # for state in states:
+#         #     if state[2] == 0:
+#         #         text_badge = "OK"
+#         #         color = "success"
+#         #     elif state[2] == 1:
+#         #         text_badge = "Warning"
+#         #         color = "warning"
+#         #     elif state[2] == 2:
+#         #         text_badge = "Critic"
+#         #         color = "danger"
+#         #     else:
+#         #         text_badge = "N/A"
+#         #         color = "secondary"
+#         #
+#         #     table_inside.append(html.Tr(
+#         #         [html.Td(state[0]),
+#         #          html.Td(state[1]),
+#         #          html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))
+#         #          ]
+#         #     ))
+#         table_body = []
+#         states_list = dbc.Table(table_body,
+#                            bordered=True,
+#                            dark=True,
+#                            hover=True,
+#                            responsive=True,
+#                            striped=True
+#                            )
+#
+#     return html.Div(id='health-states', children=states_list)
 
 # PART FOR ALARMS ALERT AND GRAPHS
 
@@ -672,7 +689,7 @@ def render_figures_top(tab, sta_list, n_intervals):
     gc.collect()
 
     if tab == 'server':
-        global client
+        # global client
         global time_graphs_names
         global time_graphs
         global fig_list
@@ -744,12 +761,12 @@ def render_figures_top(tab, sta_list, n_intervals):
                                                        hovertemplate='<b>Date:</b> %{x}<br>' +
                                                                      '<b>Val:</b> %{y}<extra></extra>'))
                     try:
-                        if client.data_retrieval is False:
-                            range_x = [pd.Timestamp(date_x[-1]) - TIME_DELTA, pd.Timestamp(date_x[-1])]
-                            fig_list[i].update_xaxes(range=range_x)
-                        else:
-                            range_x = [pd.Timestamp(date_x[0]), pd.Timestamp(date_x[-1])]
-                            fig_list[i].update_xaxes(range=range_x)
+                        # if client.data_retrieval is False:
+                        range_x = [pd.Timestamp(date_x[-1]) - TIME_DELTA, pd.Timestamp(date_x[-1])]
+                        fig_list[i].update_xaxes(range=range_x)
+                        # else:
+                        # range_x = [pd.Timestamp(date_x[0]), pd.Timestamp(date_x[-1])]
+                        # fig_list[i].update_xaxes(range=range_x)
                     except AttributeError:
                         range_x = [pd.Timestamp(date_x[-1]) - TIME_DELTA, pd.Timestamp(date_x[-1])]
                         fig_list[i].update_xaxes(range=range_x)
@@ -779,6 +796,7 @@ def update_data(tab, network_list_active, submit_value):
                 os.mkdir(BUFFER_DIR)
 
             with open(BUFFER_DIR+'/streams.data', 'w') as streams:
+                streams.write(submit_value)
                 for sta in network_list_active:
                     streams.write('\n'+sta)
         else:
@@ -910,71 +928,40 @@ def update_alarms(tab, n_intervals, type_connection, sta):
             html.Div(id='number-alarms', children=i, hidden=True)
         ])
     elif tab == 'soh':
-        states_xat = []
-        states_xat_table = []
-        states_soh = []
-        states_soh_table = []
+        states = []
+        states_table = []
         try:
-            with open(f'log/{type_connection}/states_xat.xml', 'r', encoding='utf-8') as fp:
+            with open(f'log/{type_connection}/states.xml', 'r', encoding='utf-8') as fp:
                 content = fp.read()
-                bs_states_xat = BS(content, 'lxml-xml')
-            bs_station = bs_states_xat.find('station', {'name': sta})
+                bs_states = BS(content, 'lxml-xml')
+            bs_station = bs_states.find('station', {'name': sta})
             if bs_station is not None:
                 for state in bs_station.find_all('state'):
                     state_dt = state.get('datetime')
                     state_datetime = state_dt[1:5] + '-' + state_dt[5:7] + '-' + \
                                      state_dt[7:9] + ' ' + state_dt[10:12] + ':' + \
                                      state_dt[12:14] + ':' + state_dt[14:]
-                    states_xat_table.append(html.Tr(
+                    states_table.append(html.Tr(
                         [html.Td(state_datetime),
                          html.Td(state.get('name')),
                          html.Td(state.get('value'))
                          ]
                     ))
 
-                table_body = [html.Tbody(states_xat_table)]
+            table_body = [html.Tbody(states_table)]
 
-                states_xat = dbc.Table(table_body,
-                                       bordered=True,
-                                       dark=True,
-                                       hover=True,
-                                       responsive=True,
-                                       striped=True
-                                       )
+            states = dbc.Table(table_body,
+                               bordered=True,
+                               dark=True,
+                               hover=True,
+                               responsive=True,
+                               striped=True
+                               )
         except FileNotFoundError:
-            print(f'states_xat.xml file not found in log/{type_connection}')
+            print(f'states.xml file not found in log/{type_connection}')
 
-        try:
-            with open(f'log/{type_connection}/states_soh.xml', 'r', encoding='utf-8') as fp:
-                content = fp.read()
-                bs_states_soh = BS(content, 'lxml-xml')
-            bs_station = bs_states_soh.find('station', {'name': sta})
-            if bs_station is not None:
-                for state in bs_station.find_all('state'):
-                    state_dt = state.get('datetime')
-                    state_datetime = state_dt[1:5] + '-' + state_dt[5:7] + '-' + \
-                                     state_dt[7:9] + ' ' + state_dt[10:12] + ':' + \
-                                     state_dt[12:14] + ':' + state_dt[14:]
-                    states_soh_table.append(html.Tr(
-                        [html.Td(state_datetime),
-                         html.Td(state.get('name')),
-                         html.Td(state.get('value'))
-                         ]
-                    ))
 
-                table_body = [html.Tbody(states_soh_table)]
-
-                states_soh = dbc.Table(table_body,
-                                       bordered=True,
-                                       dark=True,
-                                       hover=True,
-                                       responsive=True,
-                                       striped=True
-                                       )
-        except FileNotFoundError:
-            print(f'states_soh.xml file not found in log/{type_connection}')
-
-        return [html.Div(id='tabs-content-inline', children=[states_xat, states_soh]),
+        return [html.Div(id='tabs-content-inline', children=states),
                 html.Div(id='number-alarms', children=i, hidden=True)]
 
     elif tab == 'alarms_in_progress':
@@ -1195,10 +1182,8 @@ app.layout = dbc.Container(dbc.Row([dcc.Location(id="url"), sidebar, graph], sty
 
 
 if __name__ == '__main__':
-#    if DEBUG is not True:
-#        webbrowser.open(SERVER_DASH_PROTOCOL + SERVER_DASH_IP + ':' + str(SERVER_DASH_PORT))
-#    else:
-#        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
+
+    log.basicConfig(format="%(levelname)s: %(message)s", level=log.ERROR)
 
     app.run_server(host=SERVER_DASH_IP, port=SERVER_DASH_PORT, debug=DEBUG, threaded=True)
 
@@ -1208,12 +1193,13 @@ if __name__ == '__main__':
         os.remove(BUFFER_DIR+'/'+name+'.data')
         os.remove(BUFFER_DIR+'/streams.data')
 
-    if type(client) == EasySLC:
-        client.close()
-        del client
-    else:
-        del client
+    # if type(client) == EasySLC:
+    #     client_thread.close()
+    #     client.close()
+    #     del client_thread
+    #     del client
+    # else:
+    #     del client
 
-    client_oracle_xat.close()
-    client_oracle_soh.close()
-    del client_oracle_xat, client_oracle_soh
+    client_oracle.close()
+    del client_oracle

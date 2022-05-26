@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
-# RETRIEVE_DATA.py
+# mona_sl_client.py
 # Author: Jeremy
-# Description: Client Seedlink adapté à MONA DASH
+# Description: SeedLink client for MONA, python dash version.
 
-import argparse
 import time
-from utils import get_network_list
-from threading import Thread
+# from threading import Thread
 
 from obspy.clients.seedlink.client.seedlinkconnection import SeedLinkConnection
 from obspy.clients.seedlink.easyseedlink import EasySeedLinkClient
@@ -18,23 +16,52 @@ from obspy import UTCDateTime
 from config import *
 
 
-class EasySLC(EasySeedLinkClient):
-    def __init__(self, server_url, network_list, network_list_values,
-                 data_retrieval=False, begin_time=None, end_time=None):
-        self.network_list_values = network_list_values
+class MonaSeedLinkClient(EasySeedLinkClient):
+    """
+    MonaSeedLinkClient is the class used in MONA to get data from a stream.data file of BUFFER_DIR in config.py.
+    First version was threaded into app.py.
+    New version is a standalone python script which is launched independently from the Dash app. It's waiting for the
+    stream.data file created by MONA to retrieve data from the SeedLink Server. When the file stream.data changes, it
+    will automatically update the SeedLink client with new information (changing the server, modifying the stations
+    receiving list in realtime)
+
+    Attributes
+    ----------
+    says_str : str
+        a formatted string to print out what the animal says
+    name : str
+        the name of the animal
+    sound : str
+        the sound that the animal makes
+    num_legs : int
+        the number of legs the animal has (default 4)
+
+    Methods
+    -------
+    on_data(tr)
+        When a obspy trace is retrieved, it verifies the metadata, the expired time of it. If all good, it will save
+        into a feather file in the BUFFER_DIR: NET.STA.LOC.CHA the duration QUEUE_DURATION of data into the file.
+        If it's bigger, it will delete half of it to add the data (actually only 30 sec of data are interesting but we
+        save around 180 sec. This can be changed in config.py)
+
+    run()
+        Here is the infinite loop of the SeedLink Client. Each time it gets through one step, it verifies that the
+        streams.data file didn't change (server ip, port and stations). If there's a change, it reboot the connection
+        and adapt it with the new parameters
+
+    on_seedlink_error()
+    on_terminate()
+        They have the same way of working.They delete the connection and put it back on track. Especially useful for
+        changing fast of retrieving stations. Maybe some performance increase have to be done here. This is my way.
+    """
+    def __init__(self, server_url, data_retrieval=False, begin_time=None, end_time=None):
+
         try:
-            super(EasySLC, self).__init__(server_url, autoconnect=True)
+            super(MonaSeedLinkClient, self).__init__(server_url, autoconnect=True)
             self.conn.timeout = 30
             self.data_retrieval = data_retrieval
             self.begin_time = begin_time
             self.end_time = end_time
-            self.connected = 0
-
-            self.connected = get_network_list('server', network_list, network_list_values,
-                                              server_hostname=self.server_hostname, server_port=self.server_port)
-
-            print(network_list_values)
-
             self.streams = []
 
         except SeedLinkException:
@@ -57,7 +84,7 @@ class EasySLC(EasySeedLinkClient):
             new_data_sta = pd.DataFrame({'Date': x, 'Data_Sta': tr.data})
             try:
                 data_sta = pd.read_feather(BUFFER_DIR + '/' + station + '.data')
-                if len(data_sta) <= 4500:
+                if len(data_sta) <= int(SAMPLING_RATE * QUEUE_DURATION):
                     data_sta = pd.concat([data_sta, new_data_sta])
                 else:
                     data_sta = pd.concat([data_sta[round(-len(data_sta) / 2):], new_data_sta])
@@ -67,12 +94,12 @@ class EasySLC(EasySeedLinkClient):
             data_sta.to_feather(BUFFER_DIR + '/' + station + '.data')
 
         elif t_start - tr.stats.starttime > 300:
-            print(f'blockette is too old ({(t_start - tr.stats.starttime) / 60} min).')
+            print(f'blockette is too old ({(t_start - tr.stats.starttime) / 60} min).\n'
+                  f'Problem could be incorrect computer datetime.')
         else:
             print("blockette contains no trace")
 
     def run(self):
-
         if self.data_retrieval is False:
             while True:
                 try:
@@ -83,6 +110,13 @@ class EasySLC(EasySeedLinkClient):
                             # streams = self.conn.streams.copy()
                             del self.conn
                             self.conn = SeedLinkConnection(timeout=30)
+                            new_streams_info = new_streams[0].split(':')
+                            if len(new_streams_info) == 1:
+                                self.server_hostname = new_streams_info[0]
+                                self.server_port = 18000
+                            else:
+                                self.server_hostname = new_streams_info[0]
+                                self.server_port = new_streams_info[1]
                             self.conn.set_sl_address('%s:%d' %
                                                      (self.server_hostname, self.server_port))
                             self.conn.multistation = True
@@ -96,7 +130,7 @@ class EasySLC(EasySeedLinkClient):
                             self.streams = new_streams.copy()
 
                 except FileNotFoundError:
-                    print('WAITING FOR STREAM FILE OF MONA-LISA')
+                    print('Waiting for streams.data file...')
                     time.sleep(5)
                     if self.data_retrieval:
                         self.on_terminate()
@@ -141,7 +175,7 @@ class EasySLC(EasySeedLinkClient):
                         self.select_stream(net, sta, cha)
 
             except FileNotFoundError:
-                print('WAITING FOR STREAM FILE OF MONA-LISA')
+                print('Waiting for streams.data file...')
                 time.sleep(5)
             else:
                 self.conn.set_begin_time(self.begin_time)
@@ -156,10 +190,9 @@ class EasySLC(EasySeedLinkClient):
                         self.on_seedlink_error()
                         continue
                     else:
-
-                    # At this point the received data should be a SeedLink packet
-                    # XXX In SLClient there is a check for data == None, but I think
-                    #     there is no way that self.conn.collect() can ever return None
+                        # At this point the received data should be a SeedLink packet
+                        # XXX In SLClient there is a check for data == None, but I think
+                        #     there is no way that self.conn.collect() can ever return None
                         assert (isinstance(data, SLPacket))
 
                         packet_type = data.get_type()
@@ -189,65 +222,46 @@ class EasySLC(EasySeedLinkClient):
 
     def on_seedlink_error(self):
         self._EasySeedLinkClient__streaming_started = False
-        self.streams = self.conn.streams.copy()
+        streams = self.conn.streams.copy()
         del self.conn
         self.conn = SeedLinkConnection(timeout=30)
         self.conn.set_sl_address('%s:%d' %
                                  (self.server_hostname, self.server_port))
         self.conn.multistation = True
-        self.conn.streams = self.streams.copy()
+        self.conn.streams = streams.copy()
 
-
-class SLThread(Thread):
-    def __init__(self, name, client):
-        Thread.__init__(self)
-        self.name = name
-        self.client = client
-
-    def run(self):
-        print('Starting Thread ', self.name)
-        print('Server: ', self.client.server_hostname)
-        print('Port:', self.client.server_port)
-        print("--------------------------\n")
-        print('Network list:', self.client.network_list_values)
-        self.client.run()
-
-    def close(self):
-        self.client.close()
-
-
-def get_arguments():
-    """returns AttribDict with command line arguments"""
-    parser = argparse.ArgumentParser(
-        description='launch a seedlink server',
-        formatter_class=argparse.RawTextHelpFormatter)
-
-    # Script functionalities
-    parser.add_argument('-s', '--server', help='Path to SL server', required=True)
-    parser.add_argument('-p', '--port', help='Port of the SL server')
-    # parser.add_argument('-m', '--mseed', help='Path to mseed data folder', required=True)
-
-    args = parser.parse_args()
-
-    if args.port == None:
-        args.port = '18000'
-
-    print('Server: ', args.server)
-    print('Port: ', args.port)
-    print("--------------------------\n")
-
-    return args
+# Deprecated thread class to launch MonaSeedlinkClient from app.py
+# class SLThread(Thread):
+#     def __init__(self, name, client):
+#         Thread.__init__(self)
+#         self.name = name
+#         self.client = client
+#
+#     def run(self):
+#         print('Starting Thread ', self.name)
+#         print('Server: ', self.client.server_hostname)
+#         print('Port:', self.client.server_port)
+#         print("--------------------------\n")
+#         print('Network list:', self.client.network_list_values)
+#         self.client.run()
+#
+#     def close(self):
+#         self.client.close()
 
 
 if __name__ == '__main__':
-    args = get_arguments()
-
-    network_list = []
-    network_list_values = []
-
-    client = EasySLC(args.server + ':' + args.port, network_list, network_list_values, data_retrieval=True,
-                     begin_time='2021,11,19,4,0,0', end_time='2021,11,19,4,0,30')
-
-    print('Network list:', network_list_values)
-
-    client.run()
+    # Main algorithm to run the script. it's waiting for MONA to write the streams.data file. It's acting as a service.
+    # Once the client run, it won't stop.
+    while True:
+        try:
+            with open(BUFFER_DIR + '/streams.data', 'r') as file:
+                streams = file.read().splitlines()
+                streams_info = streams[0]
+                client = MonaSeedLinkClient(streams_info)
+            client.run()  # this is also an infinite loop, so if the client crashes, script will stay in the main
+        except FileNotFoundError:
+            print('Waiting for streams.data file...')
+            time.sleep(5)
+        except SeedLinkException:
+            print('Verify the SeedLink connection information...')
+            time.sleep(5)
