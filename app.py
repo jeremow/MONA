@@ -317,48 +317,48 @@ def display_data_retrieval(value, tab):
                 html.Br()]
 
 
-@app.callback(
-    Output('retrieve-data-btn', 'n_clicks'),
-    Input('retrieve-data-btn', 'n_clicks'),
-    Input('date-picker-dcc', 'date'),
-    Input('input-hour', 'value'),
-    Input('input-min', 'value'),
-    Input('input-sec', 'value'),
-    Input('input-period', 'value'),
-    Input('select-period', 'value'),
-    Input('tabs-connection', 'active_tab'),
-    prevent_initial_call=True
-)
-def get_data_from_retrieval(n_clicks, date, hour, min, sec, period_value, period, tab):
-    if tab == 'server':
-        # global client
-        # global client_thread
-        if n_clicks > 0:
-            delete_residual_data(delete_streams=False)
-            try:
-                date = date.split('-')
-                year = date[0]
-                month = date[1]
-                day = date[2]
-                begin_time = f'{year},{month},{day},{hour},{min},{sec}'
-                client.begin_time = begin_time
-                if period == 'day':
-                    factor = 86400
-                elif period == 'hour':
-                    factor = 3600
-                elif period == 'min':
-                    factor = 60
-                else:
-                    factor = 1
-                duration = factor * period_value
-                end_time = (UTCDateTime(begin_time) + duration).format_seedlink()
-                client.end_time = end_time
-                client_thread = SLThread('Client SL Data Retrieval', client)
-                client_thread.start()
-            except AttributeError:
-                print('Client not initialised')
-
-    return 0
+# @app.callback(
+#     Output('retrieve-data-btn', 'n_clicks'),
+#     Input('retrieve-data-btn', 'n_clicks'),
+#     Input('date-picker-dcc', 'date'),
+#     Input('input-hour', 'value'),
+#     Input('input-min', 'value'),
+#     Input('input-sec', 'value'),
+#     Input('input-period', 'value'),
+#     Input('select-period', 'value'),
+#     Input('tabs-connection', 'active_tab'),
+#     prevent_initial_call=True
+# )
+# def get_data_from_retrieval(n_clicks, date, hour, min, sec, period_value, period, tab):
+#     if tab == 'server':
+#         # global client
+#         # global client_thread
+#         if n_clicks > 0:
+#             delete_residual_data(delete_streams=False)
+#             try:
+#                 date = date.split('-')
+#                 year = date[0]
+#                 month = date[1]
+#                 day = date[2]
+#                 begin_time = f'{year},{month},{day},{hour},{min},{sec}'
+#                 client.begin_time = begin_time
+#                 if period == 'day':
+#                     factor = 86400
+#                 elif period == 'hour':
+#                     factor = 3600
+#                 elif period == 'min':
+#                     factor = 60
+#                 else:
+#                     factor = 1
+#                 duration = factor * period_value
+#                 end_time = (UTCDateTime(begin_time) + duration).format_seedlink()
+#                 client.end_time = end_time
+#                 client_thread = SLThread('Client SL Data Retrieval', client)
+#                 client_thread.start()
+#             except AttributeError:
+#                 print('Client not initialised')
+#
+#     return 0
 
 
 @app.callback(
@@ -551,76 +551,30 @@ def update_list_station(n_clicks):
                          options=stations, multi=False, style={'color': 'black'})]
 
 
-# @app.callback(Output('health-states', 'children'),
-#               Input('station-list-one-choice', 'value'),
-#               Input('interval-states', 'n_intervals'),
-#               State('tabs-connection', 'active_tab'),
-#               prevent_initial_call=True)
-# def update_states(station_name, n_intervals, tab):
-#     """
-#     Callback to update the health state on the left side.
-#     :param station_name: choose the name of the station to display info
-#     :param n_intervals: update every n_intervals the table.
-#     :return:
-#     """
-#     states = []
-#     states_list = []
-#     global client_oracle
-#
-#     try:
-#         client_oracle.write_state_health()
-#     except cx_Oracle.ProgrammingError:
-#         print('Connection error for OracleClient')
-#     except cx_Oracle.DatabaseError:
-#         print('Connection error for OracleClient')
-#     except AttributeError:
-#         print('Connection not available for new data.')
-#
-#     if station_name is not None:
-#         try:
-#             with open(f'log/{tab}/states.xml', 'r', encoding='utf-8') as fp:
-#                 content = fp.read()
-#                 bs_states = BS(content, 'lxml-xml')
-#             bs_station = bs_states.find('station', {'name': station_name})
-#             for state in bs_station.find_all('state'):
-#                 states.append([state.get('name'), state.get('value'), int(state.get('problem'))])
-#
-#         except FileNotFoundError:
-#             pass
-#         except AttributeError:
-#             pass
-#
-#
-#         # for state in states:
-#         #     if state[2] == 0:
-#         #         text_badge = "OK"
-#         #         color = "success"
-#         #     elif state[2] == 1:
-#         #         text_badge = "Warning"
-#         #         color = "warning"
-#         #     elif state[2] == 2:
-#         #         text_badge = "Critic"
-#         #         color = "danger"
-#         #     else:
-#         #         text_badge = "N/A"
-#         #         color = "secondary"
-#         #
-#         #     table_inside.append(html.Tr(
-#         #         [html.Td(state[0]),
-#         #          html.Td(state[1]),
-#         #          html.Td(dbc.Badge(text_badge, color=color, className="mr-1"))
-#         #          ]
-#         #     ))
-#         table_body = []
-#         states_list = dbc.Table(table_body,
-#                            bordered=True,
-#                            dark=True,
-#                            hover=True,
-#                            responsive=True,
-#                            striped=True
-#                            )
-#
-#     return html.Div(id='health-states', children=states_list)
+@app.callback(Output('health-states', 'children'),
+              Input('interval-states', 'n_intervals'),
+              State('tabs-connection', 'active_tab'),
+              prevent_initial_call=True)
+def update_states(n_intervals, tab):
+    """
+    Callback to update the health state on the left side.
+    :param station_name: choose the name of the station to display info
+    :param n_intervals: update every n_intervals the table.
+    :return:
+    """
+
+    global client_oracle
+
+    try:
+        client_oracle.write_state_health()
+    except cx_Oracle.ProgrammingError:
+        print('Connection error for OracleClient')
+    except cx_Oracle.DatabaseError:
+        print('Connection error for OracleClient')
+    except AttributeError:
+        print('Connection not available for new data.')
+
+    return html.Div(id='health-states', children=[])
 
 # PART FOR ALARMS ALERT AND GRAPHS
 
